@@ -3,6 +3,9 @@
 #include <vector>
 #include <memory>
 #include <future>
+#include <algorithm>
+#include <random>
+#include <numeric>
 #include <filesystem>
 #include <unordered_set>
 #include <unordered_map>
@@ -27,6 +30,7 @@ namespace tardigrade::data
 		void ReadLabelset(const std::string& dirPath, MatSize size = { 1, 1 });
 
 		int GetDataSize();
+		void Shuffle();
 
 	private :
 		int m_dataSize;

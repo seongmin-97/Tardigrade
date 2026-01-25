@@ -132,4 +132,32 @@ namespace tardigrade::data
     {
         return m_dataSize;
     }
+
+    void DataLoader::Shuffle()
+    {
+        if (m_dataSize <= 1)
+            return;
+
+        std::vector<int> indices(m_dataSize);
+        std::iota(indices.begin(), indices.end(), 0);
+
+        std::random_device rd;
+        std::mt19937 g(rd());
+
+        std::shuffle(indices.begin(), indices.end(), g);
+
+        Dataset shuffled_dataset;
+        Labelset shuffled_labelset;
+
+        for (int idx : indices) 
+        {
+            shuffled_dataset.push_back(std::move(m_dataset[idx]));
+
+            if (!m_labelset.empty()) 
+                shuffled_labelset.push_back(m_labelset[idx]);
+        }
+
+        m_dataset = std::move(shuffled_dataset);
+        m_labelset = std::move(shuffled_labelset);
+    }
 }
