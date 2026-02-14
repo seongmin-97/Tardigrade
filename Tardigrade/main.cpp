@@ -18,5 +18,7 @@ int main()
         std::cout << i << "완료 / 데이터 수 : " << dataLoader.GetDataSize() << std::endl;
     }
 
+    dataLoader.Shuffle();
+
     return 0;
 }

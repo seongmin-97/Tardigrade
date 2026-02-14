@@ -8,11 +8,11 @@ namespace tardigrade::data
         m_dataType = dataType;
     }
 
-    Data DataLoader::ReadImage(const std::string& filePath, int flag, bool showImg)
+    Matrix DataLoader::ReadImage(const std::string& filePath, int flag, bool showImg)
     {
         cv::Mat img = cv::imread(filePath, cv::IMREAD_GRAYSCALE);
 
-        Data tmpData = Eigen::MatrixXd(0, 0);
+        Matrix tmpData = Eigen::MatrixXd(0, 0);
         
         if (img.empty()) 
         {
@@ -72,8 +72,8 @@ namespace tardigrade::data
             {
                 futures.push_back(std::async(std::launch::async, [this, i, startIdx, &paths]()
                     {
-                        Data imgData = ReadImage(paths[i].string(), 0, false);
-                        m_dataset[startIdx + i] = std::make_unique<Data>(std::move(imgData));
+                        Matrix imgData = ReadImage(paths[i].string(), 0, false);
+                        m_dataset[startIdx + i] = std::make_unique<Matrix>(std::move(imgData));
                     }));
             }
 
@@ -100,7 +100,7 @@ namespace tardigrade::data
 
                 for (int i = startIdx; i < m_dataSize; i++)
                 {
-                    Label label = Label(1, 1);
+                    Matrix label = Matrix(1, 1);
                     label(0, 0) = value;
                     m_labelset[i] = label;
                 }

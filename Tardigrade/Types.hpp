@@ -3,14 +3,22 @@
 #include <memory>
 
 #include <Eigen/Dense>
+#include <unsupported/Eigen/CXX11/Tensor>
+
+namespace tardigrade
+{
+	template <int N>
+	using Tensor = Eigen::Tensor<double, N>;
+	using Vector = Eigen::VectorXd;
+	using Matrix = Eigen::MatrixXd;
+	using Tensor3D = Tensor<3>;
+	using Tensor4D = Tensor<4>;
+}
 
 namespace tardigrade::data
 {
-	typedef Eigen::MatrixXd Data;
-	typedef Eigen::MatrixXd Label;
-	
-	typedef std::vector<std::unique_ptr<Data>> Dataset;
-	typedef std::vector<Label> Labelset;
+	using Dataset = std::vector<std::unique_ptr< Eigen::MatrixXd>>;
+	using Labelset = std::vector<Eigen::MatrixXd>;
 
 	enum class DataType
 	{

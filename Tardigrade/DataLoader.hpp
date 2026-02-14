@@ -25,7 +25,7 @@ namespace tardigrade::data
 	{
 	public :
 		DataLoader(DataType dataType);
-		Data ReadImage(const std::string& filePath, int flag = cv::IMREAD_COLOR_RGB, bool showImg = false);
+		Matrix ReadImage(const std::string& filePath, int flag = cv::IMREAD_COLOR_RGB, bool showImg = false);
 		void ReadDataset(const std::string& dirPath, int flag = cv::IMREAD_COLOR_RGB, bool dirIsLabel = true);
 		void ReadLabelset(const std::string& dirPath, MatSize size = { 1, 1 });
 
