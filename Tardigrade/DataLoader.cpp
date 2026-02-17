@@ -8,11 +8,11 @@ namespace tardigrade::data
         m_dataType = dataType;
     }
 
-    Matrix DataLoader::ReadImage(const std::string& filePath, int flag, bool showImg)
+    Tensor DataLoader::ReadImage(const std::string& filePath, int flag, bool showImg)
     {
         cv::Mat img = cv::imread(filePath, cv::IMREAD_GRAYSCALE);
 
-        Matrix tmpData = Eigen::MatrixXd(0, 0);
+        Tensor tmpData = Tensor({0, 0});
         
         if (img.empty()) 
         {
@@ -23,12 +23,13 @@ namespace tardigrade::data
         int rows = img.rows;
         int cols = img.cols;
 
-        tmpData.resize(rows, cols);
+        tmpData.reshape({ rows, cols });
 
+        double* rawPtr = tmpData.data(); 
         for (int r = 0; r < rows; ++r) 
             for (int c = 0; c < cols; ++c) 
-                tmpData(r, c) = static_cast<double>(img.at<uchar>(r, c)) / 255.0;
-
+                *rawPtr++ = static_cast<double>(img.at<uchar>(r, c)) / 255.0;
+        
         if (showImg)
         {
             cv::namedWindow("Debug: Loaded Image", cv::WINDOW_AUTOSIZE);
@@ -71,10 +72,10 @@ namespace tardigrade::data
             for (size_t i = 0; i < paths.size(); i++)
             {
                 futures.push_back(std::async(std::launch::async, [this, i, startIdx, &paths]()
-                    {
-                        Matrix imgData = ReadImage(paths[i].string(), 0, false);
-                        m_dataset[startIdx + i] = std::make_unique<Matrix>(std::move(imgData));
-                    }));
+                {
+                    Tensor imgData = ReadImage(paths[i].string(), 0, false);
+                    m_dataset[startIdx + i] = std::make_unique<Tensor>(std::move(imgData));
+                }));
             }
 
             for (auto& f : futures) 
@@ -100,7 +101,7 @@ namespace tardigrade::data
 
                 for (int i = startIdx; i < m_dataSize; i++)
                 {
-                    Matrix label = Matrix(1, 1);
+                    Tensor label = Tensor({ 1, 1 });
                     label(0, 0) = value;
                     m_labelset[i] = label;
                 }

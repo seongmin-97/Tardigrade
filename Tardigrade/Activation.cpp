@@ -7,22 +7,22 @@ Activation::Activation(int inputSize)
 {
 	m_size = inputSize;
 
-	m_inputVector = Vector(m_size);
-	m_outputVector = Vector(m_size);
-	m_gradient = Vector(m_size);
+	m_inputVector = Tensor({ m_size });
+	m_outputVector = Tensor({ m_size });
+	m_gradient = Tensor({ m_size });
 }
 
-Vector ReLU::Forward(const Vector& input)
+Tensor ReLU::Forward(const Tensor& input)
 {
 	m_inputVector = input;
-	m_outputVector = input.cwiseMax(0.0);
+	m_outputVector = input.clampedMin(0.0);
 
 	return m_outputVector;
 }
 
-Vector ReLU::Backward(const Vector& input)
+Tensor ReLU::Backward(const Tensor& input)
 {
-	m_gradient = input.array() * (m_inputVector.array() > 0).cast<double>();
+	m_gradient = input * m_inputVector.step();
 
 	return m_gradient;
 } 

@@ -13,10 +13,24 @@
 #include <opencv2/opencv.hpp>
 #include <Eigen/Dense>
 
-#include "Types.hpp"
+#include "Tensor.hpp"
 
 namespace tardigrade::data
 {
+	using Dataset = std::vector<std::unique_ptr<Tensor>>;
+	using Labelset = std::vector<Tensor>;
+
+	enum class DataType
+	{
+		IMAGE
+	};
+
+	struct MatSize
+	{
+		int row;
+		int col;
+	};
+
 	namespace fs = std::filesystem;
 
 	static inline const std::unordered_set<std::string> IMAGE_EXTENSIONS = { ".jpg", ".png", ".jpeg", ".bmp", ".JPG", ".PNG" };
@@ -25,7 +39,7 @@ namespace tardigrade::data
 	{
 	public :
 		DataLoader(DataType dataType);
-		Matrix ReadImage(const std::string& filePath, int flag = cv::IMREAD_COLOR_RGB, bool showImg = false);
+		Tensor ReadImage(const std::string& filePath, int flag = cv::IMREAD_COLOR_RGB, bool showImg = false);
 		void ReadDataset(const std::string& dirPath, int flag = cv::IMREAD_COLOR_RGB, bool dirIsLabel = true);
 		void ReadLabelset(const std::string& dirPath, MatSize size = { 1, 1 });
 

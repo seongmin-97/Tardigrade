@@ -144,7 +144,7 @@
     <ClInclude Include="Activation.hpp" />
     <ClInclude Include="DataLoader.hpp" />
     <ClInclude Include="Layer.hpp" />
-    <ClInclude Include="Types.hpp" />
+    <ClInclude Include="Tensor.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

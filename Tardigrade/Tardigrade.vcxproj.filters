@@ -32,13 +32,13 @@
     <ClInclude Include="DataLoader.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="Types.hpp">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
     <ClInclude Include="Activation.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="Layer.hpp">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Tensor.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>

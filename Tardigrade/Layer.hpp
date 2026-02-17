@@ -4,7 +4,7 @@
 
 #include <Eigen/Dense>
 
-#include "Types.hpp"
+#include "Tensor.hpp"
 
 namespace tardigrade::layer
 {
@@ -13,8 +13,8 @@ namespace tardigrade::layer
 	public :
 		virtual ~Layer() = default;
 
-		virtual Vector Forward(const Vector& input) = 0;
-		virtual Vector Backward(const Vector& input) = 0;
+		virtual Tensor Forward(const Tensor& input) = 0;
+		virtual Tensor Backward(const Tensor& input) = 0;
 
 		virtual void Update(double learningRate) {}
 		virtual void SetInputSize(int inputSize) {}
@@ -28,8 +28,8 @@ namespace tardigrade::layer
 	public :
 		Dense(int inputSize, int outputSize, int batchSize = 1, bool useBias = true);
 		
-		Matrix Forward(const Matrix& input);
-		Matrix Backward(const Matrix& input);
+		Tensor Forward(const Tensor& input);
+		Tensor Backward(const Tensor& input) { return Tensor({ 0, 0 }); }
 
 		void SetInputSize(int inputSize);
 		void SetOutputSize(int outputSize);
@@ -44,10 +44,10 @@ namespace tardigrade::layer
 		int m_batchSize;
 		bool m_useBias;
 
-		Matrix m_weight;
-		Matrix m_gradient;
+		Tensor m_weight;
+		Tensor m_gradient;
 
-		Matrix m_inputMat;
-		Matrix m_outputMat;
+		Tensor m_inputMat;
+		Tensor m_outputMat;
 	};
 }
