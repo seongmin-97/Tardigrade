@@ -1,10 +1,14 @@
 #pragma once
-#include <random>
 #include <cmath>
+#include <random>
+#include <memory>
 
 #include <Eigen/Dense>
 
 #include "Tensor.hpp"
+#include "Activation.hpp"
+
+using namespace tardigrade::activation;
 
 namespace tardigrade::layer
 {
@@ -20,21 +24,20 @@ namespace tardigrade::layer
 		virtual void SetInputSize(int inputSize) {}
 		virtual void SetOutputSize(int outputSize) {}
 		virtual void SetBatchSize(int batchSize) {}
-		virtual void SetUseBias(bool useBias) {}
 	};
 
-	class Dense : Layer
+	class Dense : public Layer
 	{
 	public :
-		Dense(int inputSize, int outputSize, int batchSize = 1, bool useBias = true);
+		Dense(int inputSize, int outputSize, int batchSize = 1, ACTIVATION activation = ACTIVATION::NONE);
 		
 		Tensor Forward(const Tensor& input);
-		Tensor Backward(const Tensor& input) { return Tensor({ 0, 0 }); }
+		Tensor Backward(const Tensor& input);
 
 		void SetInputSize(int inputSize);
 		void SetOutputSize(int outputSize);
 		void SetBatchSize(int batchSize);
-		void SetUseBias(bool useBias);
+		void SetActivation(ACTIVATION activation);
 
 		void InitWeight();
 
@@ -42,12 +45,14 @@ namespace tardigrade::layer
 		int m_inputSize;
 		int m_outputSize;
 		int m_batchSize;
-		bool m_useBias;
 
 		Tensor m_weight;
 		Tensor m_gradient;
 
 		Tensor m_inputMat;
 		Tensor m_outputMat;
+
+		ACTIVATION m_enumAct;
+		std::unique_ptr<Activation> m_activation;
 	};
 }

@@ -3,13 +3,24 @@
 using namespace tardigrade;
 using namespace tardigrade::activation;
 
-Activation::Activation(int inputSize)
+Activation::Activation(int inputSize, int batchSize)
 {
 	m_size = inputSize;
+	m_batchSize = batchSize;
 
-	m_inputVector = Tensor({ m_size });
-	m_outputVector = Tensor({ m_size });
-	m_gradient = Tensor({ m_size });
+	m_inputVector = Tensor({ m_batchSize, m_size });
+	m_outputVector = Tensor({ m_batchSize, m_size });
+	m_gradient = Tensor({ m_batchSize, m_size });
+}
+
+Tensor None::Forward(const Tensor& input)
+{
+	return input;
+}
+
+Tensor None::Backward(const Tensor& input)
+{
+	return input;
 }
 
 Tensor ReLU::Forward(const Tensor& input)
@@ -22,7 +33,7 @@ Tensor ReLU::Forward(const Tensor& input)
 
 Tensor ReLU::Backward(const Tensor& input)
 {
-	m_gradient = input * m_inputVector.step();
+	m_gradient = input.cwiseMul(m_inputVector.step());
 
 	return m_gradient;
 } 

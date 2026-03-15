@@ -116,7 +116,7 @@ namespace tardigrade
             int b_cols = (other.rank() == 1) ? 1 : other.dim(1);
 
             if (a_cols != b_rows) 
-                throw std::runtime_error("Matrix-Vector multiplication dimension mismatch.");
+                throw std::runtime_error("Matrix multiplication dimension mismatch. Expected " + std::to_string(a_cols) + " cols, but got " + std::to_string(b_rows) + " rows.");
 
             std::vector<int> resShape;
             if (other.rank() == 1) resShape = { a_rows };
@@ -128,6 +128,52 @@ namespace tardigrade
             ConstMatrixMap matB(other.data(), b_rows, b_cols);
 
             result.asMatrix(a_rows, b_cols) = matA * matB;
+
+            return result;
+        }
+
+        Tensor operator+(const Tensor& other) const 
+        {
+            if (m_shape != other.m_shape)
+                throw std::runtime_error("Shape mismatch for element-wise addition.");
+
+            Tensor result(m_shape);
+            result.asVector().array() = this->asVector().array() + other.asVector().array();
+        
+            return result;
+        }
+
+        Tensor operator-(const Tensor& other) const 
+        {
+            if (m_shape != other.m_shape)
+                throw std::runtime_error("Shape mismatch for element-wise subtraction.");
+
+            Tensor result(m_shape);
+            result.asVector().array() = this->asVector().array() - other.asVector().array();
+        
+            return result;
+        }
+
+        Tensor operator*(double scalar) const 
+        {
+            Tensor result(m_shape);
+            result.asVector() = this->asVector() * scalar;
+
+            return result;
+        }
+
+        friend Tensor operator*(double scalar, const Tensor& tensor) 
+        {
+            return tensor * scalar;
+        }
+
+        Tensor operator/(double scalar) const 
+        {
+            if (scalar == 0.0)
+                throw std::runtime_error("Division by zero.");
+
+            Tensor result(m_shape);
+            result.asVector() = this->asVector() / scalar;
 
             return result;
         }
@@ -148,13 +194,36 @@ namespace tardigrade
             return result;
         }
 
+        Tensor cwiseMul(const Tensor& other) const 
+        {
+            if (m_shape != other.m_shape)
+                throw std::runtime_error("Shape mismatch for element-wise multiplication.");
+
+            Tensor result(m_shape);
+            result.asVector().array() = this->asVector().array() * other.asVector().array();
+
+            return result;
+        }
+
+        Tensor cwiseDiv(const Tensor& other) const 
+        {
+            if (m_shape != other.m_shape)
+                throw std::runtime_error("Shape mismatch for element-wise division.");
+
+            Tensor result(m_shape);
+            result.asVector().array() = this->asVector().array() / other.asVector().array();
+        
+            return result;
+        }
+
     private:
         int calculateIndex(const std::vector<int>& indices) const 
         {
             int flatIndex = 0;
             int stride = 1;
 
-            for (int i = m_shape.size() - 1; i >= 0; --i) {
+            for (int i = m_shape.size() - 1; i >= 0; --i) 
+            {
                 flatIndex += indices[i] * stride;
                 stride *= m_shape[i];
             }

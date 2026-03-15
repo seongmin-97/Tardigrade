@@ -138,12 +138,14 @@
     <ClCompile Include="Activation.cpp" />
     <ClCompile Include="DataLoader.cpp" />
     <ClCompile Include="Layer.cpp" />
+    <ClCompile Include="Loss.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Activation.hpp" />
     <ClInclude Include="DataLoader.hpp" />
     <ClInclude Include="Layer.hpp" />
+    <ClInclude Include="Loss.hpp" />
     <ClInclude Include="Tensor.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
