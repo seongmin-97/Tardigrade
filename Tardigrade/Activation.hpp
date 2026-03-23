@@ -14,6 +14,7 @@ namespace tardigrade::activation
 	{
 	public :
 		Activation(int inputSize, int batchSize);
+		virtual ~Activation() = default;
 
 		virtual Tensor Forward(const Tensor& input) = 0;
 		virtual Tensor Backward(const Tensor& input) = 0;
@@ -29,6 +30,7 @@ namespace tardigrade::activation
 
 	class None : public Activation
 	{
+	public :
 		None(int inputSize, int batchSize) : Activation(inputSize, batchSize) {}
 
 		Tensor Forward(const Tensor& input);
