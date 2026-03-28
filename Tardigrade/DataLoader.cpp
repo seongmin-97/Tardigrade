@@ -10,7 +10,7 @@ namespace tardigrade::data
 
     Tensor DataLoader::ReadImage(const std::string& filePath, int flag, bool showImg)
     {
-        cv::Mat img = cv::imread(filePath, cv::IMREAD_GRAYSCALE);
+        cv::Mat img = cv::imread(filePath, flag);
 
         Tensor tmpData = Tensor({0, 0});
         
@@ -22,13 +22,27 @@ namespace tardigrade::data
 
         int rows = img.rows;
         int cols = img.cols;
+        int channels = img.channels();
 
-        tmpData.reshape({ rows, cols });
+        tmpData.reshape({ rows * cols * channels, 1 });
 
         double* rawPtr = tmpData.data(); 
-        for (int r = 0; r < rows; ++r) 
-            for (int c = 0; c < cols; ++c) 
-                *rawPtr++ = static_cast<double>(img.at<uchar>(r, c)) / 255.0;
+        if (channels == 1) 
+        {
+            for (int r = 0; r < rows; ++r) 
+                for (int c = 0; c < cols; ++c) 
+                    *rawPtr++ = static_cast<double>(img.at<uchar>(r, c)) / 255.0;
+        } 
+        else if (channels == 3) 
+        {
+            for (int r = 0; r < rows; ++r) 
+                for (int c = 0; c < cols; ++c) {
+                    cv::Vec3b pixel = img.at<cv::Vec3b>(r, c);
+                    *rawPtr++ = static_cast<double>(pixel[0]) / 255.0;
+                    *rawPtr++ = static_cast<double>(pixel[1]) / 255.0;
+                    *rawPtr++ = static_cast<double>(pixel[2]) / 255.0;
+                }
+        }
         
         if (showImg)
         {
@@ -71,10 +85,10 @@ namespace tardigrade::data
 
             for (size_t i = 0; i < paths.size(); i++)
             {
-                futures.push_back(std::async(std::launch::async, [this, i, startIdx, &paths]()
+                futures.push_back(std::async(std::launch::async, [this, i, startIdx, flag, &paths]()
                 {
-                    Tensor imgData = ReadImage(paths[i].string(), 0, false);
-                    m_dataset[startIdx + i] = std::make_unique<Tensor>(std::move(imgData));
+                    Tensor imgData = ReadImage(paths[i].string(), flag, false);
+                    m_dataset[startIdx + i] = std::move(imgData);
                 }));
             }
 
@@ -155,10 +169,52 @@ namespace tardigrade::data
             shuffled_dataset.push_back(std::move(m_dataset[idx]));
 
             if (!m_labelset.empty()) 
-                shuffled_labelset.push_back(m_labelset[idx]);
+                shuffled_labelset.push_back(std::move(m_labelset[idx]));
         }
 
         m_dataset = std::move(shuffled_dataset);
         m_labelset = std::move(shuffled_labelset);
+    }
+
+    Tensor DataLoader::GetBatch(int startIdx, int batchSize)
+    {
+        if (startIdx < 0 || startIdx >= m_dataSize || batchSize <= 0)
+            throw std::runtime_error("Invalid startIdx or batchSize");
+
+        int actualBatchSize = std::min(batchSize, m_dataSize - startIdx);
+        if (actualBatchSize == 0)
+            return Tensor();
+
+        int featureSize = m_dataset[startIdx].size();
+
+        Tensor batch({ featureSize, actualBatchSize });
+
+        for (int i = 0; i < actualBatchSize; ++i)
+        {
+            batch.asMatrix(featureSize, actualBatchSize).col(i) = m_dataset[startIdx + i].asVector();
+        }
+
+        return batch;
+    }
+
+    Tensor DataLoader::GetLabelBatch(int startIdx, int batchSize)
+    {
+        if (m_labelset.empty() || startIdx < 0 || startIdx >= m_dataSize || batchSize <= 0)
+            throw std::runtime_error("Invalid label request");
+
+        int actualBatchSize = std::min(batchSize, m_dataSize - startIdx);
+        if (actualBatchSize == 0)
+            return Tensor();
+
+        int labelSize = m_labelset[startIdx].size();
+
+        Tensor batch({ labelSize, actualBatchSize });
+
+        for (int i = 0; i < actualBatchSize; ++i)
+        {
+            batch.asMatrix(labelSize, actualBatchSize).col(i) = m_labelset[startIdx + i].asVector();
+        }
+
+        return batch;
     }
 }

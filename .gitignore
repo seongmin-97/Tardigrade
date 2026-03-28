@@ -4,6 +4,9 @@
 *.userosscache
 *.sln.docstates
 
+## [ Antigravity ]
+.agents/
+
 ## [ CMake Build Outputs ]
 build/
 CMakeCache.txt

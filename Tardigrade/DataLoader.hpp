@@ -17,7 +17,7 @@
 
 namespace tardigrade::data
 {
-	using Dataset = std::vector<std::unique_ptr<Tensor>>;
+	using Dataset = std::vector<Tensor>;
 	using Labelset = std::vector<Tensor>;
 
 	enum class DataType
@@ -45,6 +45,9 @@ namespace tardigrade::data
 
 		int GetDataSize();
 		void Shuffle();
+		
+		Tensor GetBatch(int startIdx, int batchSize);
+		Tensor GetLabelBatch(int startIdx, int batchSize);
 
 	private :
 		int m_dataSize;
