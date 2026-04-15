@@ -16,6 +16,7 @@ set(SOURCES
     Tardigrade/Activation.cpp
     Tardigrade/DataLoader.cpp
     Tardigrade/Layer.cpp
+    Tardigrade/Optimizer.cpp
 )
 
 # Header files (optional, but good for IDEs)
@@ -24,6 +25,7 @@ set(HEADERS
     Tardigrade/DataLoader.hpp
     Tardigrade/Layer.hpp
     Tardigrade/Tensor.hpp
+    Tardigrade/Optimizer.hpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})

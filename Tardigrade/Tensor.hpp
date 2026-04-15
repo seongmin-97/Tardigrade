@@ -58,7 +58,7 @@ namespace tardigrade
             long long newSize = std::accumulate(newShape.begin(), newShape.end(), 1LL, std::multiplies<int>());
 
             if (newSize != m_data.size())
-                m_data.resize(newSize);
+                throw std::runtime_error("Shape mismatch for reshape.");
 
             m_shape = newShape;
         }
@@ -99,6 +99,7 @@ namespace tardigrade
         size_t size() const { return m_data.size(); }
         
         double& operator[](size_t index) { return m_data[index]; }
+        const double& operator[](size_t index) const { return m_data[index]; }
 
         template<typename... Args>
         double& operator()(Args... indices) 

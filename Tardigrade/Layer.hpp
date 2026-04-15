@@ -20,7 +20,8 @@ namespace tardigrade::layer
 		virtual Tensor Forward(const Tensor& input) = 0;
 		virtual Tensor Backward(const Tensor& input) = 0;
 
-		virtual void Update(double learningRate) {}
+		virtual std::vector<std::pair<Tensor*, Tensor*>> GetParameters() { return {}; }
+
 		virtual void SetInputSize(int inputSize) {}
 		virtual void SetOutputSize(int outputSize) {}
 		virtual void SetBatchSize(int batchSize) {}
@@ -40,6 +41,7 @@ namespace tardigrade::layer
 		void SetActivation(ACTIVATION activation);
 
 		void InitWeight();
+        std::vector<std::pair<Tensor*, Tensor*>> GetParameters() override;
 
 	public:
 		int m_inputSize;

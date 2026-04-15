@@ -6,6 +6,7 @@
 
 ## [ Antigravity ]
 .agents/
+Docs/
 
 ## [ CMake Build Outputs ]
 build/

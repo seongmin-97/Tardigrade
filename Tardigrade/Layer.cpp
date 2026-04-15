@@ -40,7 +40,7 @@ Tensor Dense::Forward(const Tensor& input)
         throw std::runtime_error("Input dimension mismatch in Dense::Forward. Expected " + std::to_string(m_inputSize - 1) + " but got " + std::to_string(rows));
 
     m_inputMat.row(0).setConstant(1.0);
-    m_inputMat.asMatrix(rows, cols).bottomRows(rows) = input.asMatrix(rows, cols);
+    m_inputMat.asMatrix(m_inputSize, m_batchSize).bottomRows(rows) = input.asMatrix(rows, cols);
 
     m_outputMat = m_activation->Forward(m_weight.transpose() * m_inputMat);
 
@@ -138,4 +138,9 @@ void Dense::InitWeight()
 
     // 상숫값(1.0)과 곱해지는 Bias 항은 0으로 초기화
     m_weight.row(0).setZero();
+}
+
+std::vector<std::pair<Tensor*, Tensor*>> Dense::GetParameters()
+{
+    return { {&m_weight, &m_gradient} };
 }
