@@ -16,6 +16,8 @@ set(SOURCES
     Tardigrade/Activation.cpp
     Tardigrade/DataLoader.cpp
     Tardigrade/Layer.cpp
+    Tardigrade/Loss.cpp
+    Tardigrade/Model.cpp
     Tardigrade/Optimizer.cpp
 )
 
@@ -24,6 +26,8 @@ set(HEADERS
     Tardigrade/Activation.hpp
     Tardigrade/DataLoader.hpp
     Tardigrade/Layer.hpp
+    Tardigrade/Loss.hpp
+    Tardigrade/Model.hpp
     Tardigrade/Tensor.hpp
     Tardigrade/Optimizer.hpp
 )

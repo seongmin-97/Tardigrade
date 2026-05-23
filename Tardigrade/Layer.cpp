@@ -28,6 +28,9 @@ Dense::Dense(int inputSize, int outputSize, int batchSize, ACTIVATION activation
     case ACTIVATION::ReLU :
         m_activation = std::make_unique<ReLU>(m_outputSize, m_batchSize);
         break;
+    case ACTIVATION::Softmax :
+        m_activation = std::make_unique<activation::Softmax>(m_outputSize, m_batchSize);
+        break;
     }
 }
 
@@ -115,6 +118,9 @@ void Dense::SetActivation(ACTIVATION activation)
         break;
     case ACTIVATION::ReLU:
         m_activation = std::make_unique<ReLU>(m_outputSize, m_batchSize);
+        break;
+    case ACTIVATION::Softmax:
+        m_activation = std::make_unique<activation::Softmax>(m_outputSize, m_batchSize);
         break;
     }
 }

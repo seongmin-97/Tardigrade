@@ -1,220 +1,258 @@
 #include "DataLoader.hpp"
 
-namespace tardigrade::data 
+using namespace tardigrade;
+using namespace tardigrade::data;
+
+// ============================================================
+// Constructor
+// ============================================================
+DataLoader::DataLoader(LoadStrategy strategy)
+    : m_strategy(strategy),
+      m_targetSize({0, 0}),
+      m_readFlag(cv::IMREAD_GRAYSCALE)
 {
-    DataLoader::DataLoader(DataType dataType)
+}
+
+// ============================================================
+// ReadImage: 이미지 파일 → 정규화된 Tensor
+//
+// 두 구현(기존 DataLoader + main.cpp)의 장점을 결합:
+//   - main.cpp의 리사이즈 + 예외 기반 에러 처리
+//   - DataLoader의 멀티채널(1ch/3ch) 지원
+//   - 바로 올바른 크기의 Tensor 생성 (reshape 불필요)
+//
+// 정규화: pixel_value / 255.0 → [0.0, 1.0]
+// ============================================================
+Tensor DataLoader::ReadImage(const std::string& path, MatSize target, int flag) const
+{
+    cv::Mat img = cv::imread(path, flag);
+
+    if (img.empty())
     {
-        m_dataSize = 0;
-        m_dataType = dataType;
+        throw std::runtime_error("Cannot read image: " + path);
     }
 
-    Tensor DataLoader::ReadImage(const std::string& filePath, int flag, bool showImg)
+    // 리사이즈 (target이 유효한 경우)
+    if (target.row > 0 && target.col > 0)
     {
-        cv::Mat img = cv::imread(filePath, flag);
-
-        Tensor tmpData = Tensor({0, 0});
-        
-        if (img.empty()) 
-        {
-            std::cerr << "Error: Image not found at " << filePath << std::endl;
-            return tmpData;
-        }
-
-        int rows = img.rows;
-        int cols = img.cols;
-        int channels = img.channels();
-
-        tmpData.reshape({ rows * cols * channels, 1 });
-
-        double* rawPtr = tmpData.data(); 
-        if (channels == 1) 
-        {
-            for (int r = 0; r < rows; ++r) 
-                for (int c = 0; c < cols; ++c) 
-                    *rawPtr++ = static_cast<double>(img.at<uchar>(r, c)) / 255.0;
-        } 
-        else if (channels == 3) 
-        {
-            for (int r = 0; r < rows; ++r) 
-                for (int c = 0; c < cols; ++c) {
-                    cv::Vec3b pixel = img.at<cv::Vec3b>(r, c);
-                    *rawPtr++ = static_cast<double>(pixel[0]) / 255.0;
-                    *rawPtr++ = static_cast<double>(pixel[1]) / 255.0;
-                    *rawPtr++ = static_cast<double>(pixel[2]) / 255.0;
-                }
-        }
-        
-        if (showImg)
-        {
-            cv::namedWindow("Debug: Loaded Image", cv::WINDOW_AUTOSIZE);
-            cv::imshow("Debug: Loaded Image", img);
-            std::cout << "[Debug] Visualization active. Press any key to continue..." << std::endl;
-            cv::waitKey(0); 
-            cv::destroyWindow("Debug: Loaded Image");
-        }
-
-        return tmpData;
+        cv::resize(img, img, cv::Size(target.col, target.row));
     }
 
-    void DataLoader::ReadDataset(const std::string& dirPath, int flag, bool dirIsLabel)
+    int rows = img.rows;
+    int cols = img.cols;
+    int channels = img.channels();
+    int totalPixels = rows * cols * channels;
+
+    Tensor result({ totalPixels, 1 });
+    double* rawPtr = result.data();
+
+    if (channels == 1)
     {
-        try 
+        for (int r = 0; r < rows; ++r)
         {
-            if (!fs::exists(dirPath) || !fs::is_directory(dirPath))
+            for (int c = 0; c < cols; ++c)
             {
-                std::cerr << "Invalid path: " << dirPath << std::endl;
-                return;
-            }
-
-            int startIdx = m_dataSize;
-
-            std::vector<fs::path> paths;
-            for (const auto& entry : fs::directory_iterator(dirPath)) 
-            {
-                if (fs::is_regular_file(entry) && IMAGE_EXTENSIONS.count(entry.path().extension().string())) 
-                {
-                    paths.push_back(entry.path());
-                }
-            }
-
-            if (paths.empty())
-                return;
-
-            m_dataset.resize(startIdx + paths.size());
-            std::vector<std::future<void>> futures;
-
-            for (size_t i = 0; i < paths.size(); i++)
-            {
-                futures.push_back(std::async(std::launch::async, [this, i, startIdx, flag, &paths]()
-                {
-                    Tensor imgData = ReadImage(paths[i].string(), flag, false);
-                    m_dataset[startIdx + i] = std::move(imgData);
-                }));
-            }
-
-            for (auto& f : futures) 
-                f.wait();
-
-            m_dataSize += paths.size();
-
-            if (dirIsLabel)
-            {
-                m_labelset.resize(m_dataSize);
-
-                double value;
-                fs::path p(dirPath);
-
-                if (p.has_filename())
-                {
-                    value = std::stod(p.filename().string());
-                }
-                else
-                {
-                    value = std::stod(p.parent_path().filename().string());
-                }
-
-                for (int i = startIdx; i < m_dataSize; i++)
-                {
-                    Tensor label = Tensor({ 1, 1 });
-                    label(0, 0) = value;
-                    m_labelset[i] = label;
-                }
+                *rawPtr++ = static_cast<double>(img.at<uchar>(r, c)) / 255.0;
             }
         }
-        catch (const fs::filesystem_error& e) 
+    }
+    else if (channels == 3)
+    {
+        for (int r = 0; r < rows; ++r)
         {
-            std::cerr << "Filesystem error: " << e.what() << std::endl;
+            for (int c = 0; c < cols; ++c)
+            {
+                cv::Vec3b pixel = img.at<cv::Vec3b>(r, c);
+                *rawPtr++ = static_cast<double>(pixel[0]) / 255.0;
+                *rawPtr++ = static_cast<double>(pixel[1]) / 255.0;
+                *rawPtr++ = static_cast<double>(pixel[2]) / 255.0;
+            }
         }
     }
 
-    void DataLoader::ReadLabelset(const std::string& dirPath, MatSize size)
+    return result;
+}
+
+// ============================================================
+// LoadImageDataset: 디렉토리 구조에서 이미지 데이터셋 로딩
+//
+// 디렉토리 규약: rootDir/{0~9}/*.{jpg,png,...}
+// 폴더 이름이 라벨 값으로 사용됨
+// ============================================================
+void DataLoader::LoadImageDataset(const std::string& rootDir, MatSize target, int flag)
+{
+    m_targetSize = target;
+    m_readFlag = flag;
+
+    m_data.clear();
+    m_paths.clear();
+    m_labels.clear();
+
+    for (int label = 0; label <= 9; ++label)
     {
-        try
+        fs::path labelDir = fs::path(rootDir) / std::to_string(label);
+
+        if (!fs::exists(labelDir) || !fs::is_directory(labelDir))
         {
-            if (!fs::exists(dirPath) || !fs::is_directory(dirPath))
+            std::cerr << "[WARNING] Label directory not found: " << labelDir << "\n";
+            continue;
+        }
+
+        for (const auto& entry : fs::directory_iterator(labelDir))
+        {
+            if (!entry.is_regular_file())
             {
-                std::cerr << "Invalid path: " << dirPath << std::endl;
+                continue;
             }
 
-        }
-        catch (const fs::filesystem_error& e)
-        {
-            std::cerr << "Filesystem error: " << e.what() << std::endl;
+            const auto ext = entry.path().extension().string();
+            if (IMAGE_EXTENSIONS.find(ext) == IMAGE_EXTENSIONS.end())
+            {
+                continue;
+            }
+
+            std::string filePath = entry.path().string();
+
+            if (m_strategy == LoadStrategy::EAGER)
+            {
+                try
+                {
+                    m_data.push_back(ReadImage(filePath, target, flag));
+                    m_labels.push_back(label);
+                }
+                catch (const std::exception& e)
+                {
+                    std::cerr << "[WARNING] Failed to load: " << e.what() << "\n";
+                }
+            }
+            else // LAZY
+            {
+                m_paths.push_back(filePath);
+                m_labels.push_back(label);
+            }
         }
     }
 
-    int DataLoader::GetDataSize()
+    std::cout << "[INFO] Dataset loaded: " << GetDataSize() << " samples"
+              << " (strategy: " << (m_strategy == LoadStrategy::EAGER ? "EAGER" : "LAZY") << ")\n";
+}
+
+// ============================================================
+// 접근자
+// ============================================================
+size_t DataLoader::GetDataSize() const
+{
+    return m_labels.size();
+}
+
+Tensor DataLoader::GetData(size_t index) const
+{
+    if (index >= GetDataSize())
     {
-        return m_dataSize;
+        throw std::runtime_error("DataLoader: index out of range");
     }
 
-    void DataLoader::Shuffle()
+    if (m_strategy == LoadStrategy::EAGER)
     {
-        if (m_dataSize <= 1)
-            return;
+        return m_data[index];
+    }
+    else
+    {
+        return ReadImage(m_paths[index], m_targetSize, m_readFlag);
+    }
+}
 
-        std::vector<int> indices(m_dataSize);
-        std::iota(indices.begin(), indices.end(), 0);
-
-        std::random_device rd;
-        std::mt19937 g(rd());
-
-        std::shuffle(indices.begin(), indices.end(), g);
-
-        Dataset shuffled_dataset;
-        Labelset shuffled_labelset;
-
-        for (int idx : indices) 
-        {
-            shuffled_dataset.push_back(std::move(m_dataset[idx]));
-
-            if (!m_labelset.empty()) 
-                shuffled_labelset.push_back(std::move(m_labelset[idx]));
-        }
-
-        m_dataset = std::move(shuffled_dataset);
-        m_labelset = std::move(shuffled_labelset);
+int DataLoader::GetLabel(size_t index) const
+{
+    if (index >= GetDataSize())
+    {
+        throw std::runtime_error("DataLoader: label index out of range");
     }
 
-    Tensor DataLoader::GetBatch(int startIdx, int batchSize)
+    return m_labels[index];
+}
+
+// ============================================================
+// 배치 반환
+// ============================================================
+Tensor DataLoader::GetBatch(size_t startIdx, size_t batchSize) const
+{
+    if (startIdx >= GetDataSize() || batchSize == 0)
     {
-        if (startIdx < 0 || startIdx >= m_dataSize || batchSize <= 0)
-            throw std::runtime_error("Invalid startIdx or batchSize");
-
-        int actualBatchSize = std::min(batchSize, m_dataSize - startIdx);
-        if (actualBatchSize == 0)
-            return Tensor();
-
-        int featureSize = m_dataset[startIdx].size();
-
-        Tensor batch({ featureSize, actualBatchSize });
-
-        for (int i = 0; i < actualBatchSize; ++i)
-        {
-            batch.asMatrix(featureSize, actualBatchSize).col(i) = m_dataset[startIdx + i].asVector();
-        }
-
-        return batch;
+        throw std::runtime_error("DataLoader: invalid batch parameters");
     }
 
-    Tensor DataLoader::GetLabelBatch(int startIdx, int batchSize)
+    size_t actualSize = std::min(batchSize, GetDataSize() - startIdx);
+    Tensor first = GetData(startIdx);
+    int featureSize = static_cast<int>(first.size());
+
+    Tensor batch({ featureSize, static_cast<int>(actualSize) });
+    batch.asMatrix(featureSize, static_cast<int>(actualSize)).col(0) = first.asVector();
+
+    for (size_t i = 1; i < actualSize; ++i)
     {
-        if (m_labelset.empty() || startIdx < 0 || startIdx >= m_dataSize || batchSize <= 0)
-            throw std::runtime_error("Invalid label request");
+        Tensor sample = GetData(startIdx + i);
+        batch.asMatrix(featureSize, static_cast<int>(actualSize)).col(static_cast<int>(i)) = sample.asVector();
+    }
 
-        int actualBatchSize = std::min(batchSize, m_dataSize - startIdx);
-        if (actualBatchSize == 0)
-            return Tensor();
+    return batch;
+}
 
-        int labelSize = m_labelset[startIdx].size();
+std::vector<int> DataLoader::GetLabelBatch(size_t startIdx, size_t batchSize) const
+{
+    if (startIdx >= GetDataSize() || batchSize == 0)
+    {
+        throw std::runtime_error("DataLoader: invalid label batch parameters");
+    }
 
-        Tensor batch({ labelSize, actualBatchSize });
+    size_t actualSize = std::min(batchSize, GetDataSize() - startIdx);
+    return std::vector<int>(
+        m_labels.begin() + static_cast<long>(startIdx),
+        m_labels.begin() + static_cast<long>(startIdx + actualSize)
+    );
+}
 
-        for (int i = 0; i < actualBatchSize; ++i)
+// ============================================================
+// Shuffle: 인덱스 기반 셔플 (Eager/Lazy 공통)
+// ============================================================
+void DataLoader::Shuffle(std::mt19937& rng)
+{
+    size_t n = GetDataSize();
+    if (n <= 1)
+    {
+        return;
+    }
+
+    std::vector<size_t> indices(n);
+    std::iota(indices.begin(), indices.end(), 0);
+    std::shuffle(indices.begin(), indices.end(), rng);
+
+    if (m_strategy == LoadStrategy::EAGER)
+    {
+        std::vector<Tensor> shuffledData(n);
+        std::vector<int> shuffledLabels(n);
+
+        for (size_t i = 0; i < n; ++i)
         {
-            batch.asMatrix(labelSize, actualBatchSize).col(i) = m_labelset[startIdx + i].asVector();
+            shuffledData[i] = std::move(m_data[indices[i]]);
+            shuffledLabels[i] = m_labels[indices[i]];
         }
 
-        return batch;
+        m_data = std::move(shuffledData);
+        m_labels = std::move(shuffledLabels);
+    }
+    else // LAZY
+    {
+        std::vector<std::string> shuffledPaths(n);
+        std::vector<int> shuffledLabels(n);
+
+        for (size_t i = 0; i < n; ++i)
+        {
+            shuffledPaths[i] = std::move(m_paths[indices[i]]);
+            shuffledLabels[i] = m_labels[indices[i]];
+        }
+
+        m_paths = std::move(shuffledPaths);
+        m_labels = std::move(shuffledLabels);
     }
 }

@@ -32,12 +32,12 @@ namespace tardigrade::layer
 	public :
 		Dense(int inputSize, int outputSize, int batchSize = 1, ACTIVATION activation = ACTIVATION::NONE);
 		
-		Tensor Forward(const Tensor& input);
-		Tensor Backward(const Tensor& input);
+		Tensor Forward(const Tensor& input) override;
+		Tensor Backward(const Tensor& input) override;
 
-		void SetInputSize(int inputSize);
-		void SetOutputSize(int outputSize);
-		void SetBatchSize(int batchSize);
+		void SetInputSize(int inputSize) override;
+		void SetOutputSize(int outputSize) override;
+		void SetBatchSize(int batchSize) override;
 		void SetActivation(ACTIVATION activation);
 
 		void InitWeight();
