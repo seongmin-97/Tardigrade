@@ -3,9 +3,9 @@
 using namespace tardigrade;
 using namespace tardigrade::loss;
 
-// ============================================================
-// Loss (Base)
-// ============================================================
+// ------------------------------------------------------------
+// Loss Base Class
+// ------------------------------------------------------------
 Loss::Loss(int inputSize, int batchSize)
     : m_inputSize(inputSize),
       m_batchSize(batchSize),
@@ -14,9 +14,9 @@ Loss::Loss(int inputSize, int batchSize)
 {
 }
 
-// ============================================================
-// SoftmaxCrossEntropy
-// ============================================================
+// ------------------------------------------------------------
+// SoftmaxCrossEntropy Implementation
+// ------------------------------------------------------------
 SoftmaxCrossEntropy::SoftmaxCrossEntropy(int inputSize, int batchSize)
     : Loss(inputSize, batchSize),
       m_probs({ inputSize, 1 }),
@@ -25,13 +25,7 @@ SoftmaxCrossEntropy::SoftmaxCrossEntropy(int inputSize, int batchSize)
 }
 
 /**
- * @brief Softmax + Cross-Entropy 순전파
- *
- * Step 1 — Numerically stable Softmax:
- *   σ(z)_k = exp(z_k - max(z)) / Σ_j exp(z_j - max(z))
- *
- * Step 2 — Cross-Entropy Loss:
- *   L = -log(σ(z)_label + ε)
+ * @brief Computes forward pass of combined Softmax and Cross-Entropy Loss.
  */
 double SoftmaxCrossEntropy::Forward(const Tensor& logits, int label)
 {
@@ -57,20 +51,13 @@ double SoftmaxCrossEntropy::Forward(const Tensor& logits, int label)
         m_probs[i] /= sumExp;
     }
 
-    // Step 2: Cross-Entropy Loss
+    // Step 2: Cross-Entropy Loss calculation
     constexpr double eps = 1e-12;
     return -std::log(m_probs[label] + eps);
 }
 
 /**
- * @brief Softmax + Cross-Entropy 역전파
- *
- * Combined gradient (Softmax + CE):
- *   dL/dz_k = σ(z)_k - y_k
- *   where y_k = 1 if k == label, else 0
- *
- * 이 결합 gradient는 개별 Softmax backward + CE backward보다
- * 수치적으로 안정적이고 계산이 간단하다.
+ * @brief Computes backward pass of combined Softmax and Cross-Entropy Loss.
  */
 Tensor SoftmaxCrossEntropy::Backward()
 {
@@ -91,9 +78,9 @@ const Tensor& SoftmaxCrossEntropy::GetProbs() const
     return m_probs;
 }
 
-// ============================================================
-// MSE (Mean Squared Error)
-// ============================================================
+// ------------------------------------------------------------
+// MSE (Mean Squared Error) Implementation
+// ------------------------------------------------------------
 MSE::MSE(int inputSize, int batchSize)
     : Loss(inputSize, batchSize),
       m_target({ inputSize, batchSize })
@@ -101,9 +88,7 @@ MSE::MSE(int inputSize, int batchSize)
 }
 
 /**
- * @brief MSE 순전파 (Tensor 대 Tensor)
- *
- * L = (1/n) Σ_i (y_pred_i - y_true_i)²
+ * @brief Computes MSE forward pass using prediction and target tensors.
  */
 double MSE::Forward(const Tensor& prediction, const Tensor& target)
 {
@@ -123,9 +108,7 @@ double MSE::Forward(const Tensor& prediction, const Tensor& target)
 }
 
 /**
- * @brief MSE 순전파 (int label → one-hot 변환)
- *
- * 정수 라벨을 one-hot 벡터로 변환한 뒤 Tensor 버전을 호출한다.
+ * @brief Computes MSE forward pass by converting an integer label to a one-hot vector.
  */
 double MSE::Forward(const Tensor& prediction, int label)
 {
@@ -140,9 +123,7 @@ double MSE::Forward(const Tensor& prediction, int label)
 }
 
 /**
- * @brief MSE 역전파
- *
- * dL/dy_pred_i = (2/n)(y_pred_i - y_true_i)
+ * @brief Computes MSE backward pass.
  */
 Tensor MSE::Backward()
 {

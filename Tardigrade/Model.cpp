@@ -4,9 +4,9 @@
 using namespace tardigrade;
 using namespace tardigrade::model;
 
-// ============================================================
-// AddLayer / SetOptimizer / SetLossFunction
-// ============================================================
+// ------------------------------------------------------------
+// Model Setup: Layer, Optimizer and Loss Function configuration
+// ------------------------------------------------------------
 void Model::AddLayer(std::unique_ptr<layer::Layer> layer)
 {
     m_layers.push_back(std::move(layer));
@@ -22,12 +22,9 @@ void Model::SetLossFunction(std::unique_ptr<loss::Loss> lossFunc)
     m_lossFunction = std::move(lossFunc);
 }
 
-// ============================================================
-// InitWeights
-//
-// 각 레이어의 가중치를 초기화하고,
-// Optimizer에 (weight, gradient) 쌍을 자동 등록한다.
-// ============================================================
+// ------------------------------------------------------------
+// InitWeights: Initialize weights for all layers and register parameters
+// ------------------------------------------------------------
 void Model::InitWeights()
 {
     if (!m_optimizer)
@@ -37,7 +34,7 @@ void Model::InitWeights()
 
     for (auto& layer : m_layers)
     {
-        // Dense 레이어인 경우 InitWeight + 파라미터 등록
+        // If the layer is Dense, initialize weights and register parameters with optimizer
         auto* dense = dynamic_cast<layer::Dense*>(layer.get());
         if (dense)
         {
@@ -47,9 +44,9 @@ void Model::InitWeights()
     }
 }
 
-// ============================================================
-// Forward: 입력 → 모든 레이어 순서대로 → 출력
-// ============================================================
+// ------------------------------------------------------------
+// Forward: Propagates input through all layers sequentially
+// ------------------------------------------------------------
 Tensor Model::Forward(const Tensor& input)
 {
     Tensor current = input;
@@ -62,9 +59,9 @@ Tensor Model::Forward(const Tensor& input)
     return current;
 }
 
-// ============================================================
-// Backward: gradient를 역순으로 전파
-// ============================================================
+// ------------------------------------------------------------
+// Backward: Propagates gradients backwards through layers in reverse order
+// ------------------------------------------------------------
 void Model::Backward(const Tensor& gradOutput)
 {
     Tensor current = gradOutput;
@@ -75,16 +72,16 @@ void Model::Backward(const Tensor& gradOutput)
     }
 }
 
-// ============================================================
-// TrainStep: 한 step 학습 통합 수행
+// ------------------------------------------------------------
+// TrainStep: Performs a single training step
 //
-// 1. ZeroGrad    — 이전 gradient 초기화
-// 2. Forward     — 입력 → 모든 레이어 → logits
-// 3. Loss.Forward — logits + label → 손실값
-// 4. Loss.Backward — dL/d(logits)
-// 5. Layer Backward — gradient 역전파
-// 6. Optimizer.Step — 파라미터 업데이트
-// ============================================================
+// 1. ZeroGrad     - Resets gradients of parameters
+// 2. Forward      - Propagates input to logits
+// 3. Loss.Forward - Computes loss value from logits and label
+// 4. Prediction   - Predicts class label
+// 5. Backward     - Backpropagates loss gradient
+// 6. Step         - Updates parameters using the optimizer
+// ------------------------------------------------------------
 double Model::TrainStep(const Tensor& input, int label, int& predicted)
 {
     if (!m_optimizer || !m_lossFunction)
@@ -98,10 +95,10 @@ double Model::TrainStep(const Tensor& input, int label, int& predicted)
     // 2. Forward
     Tensor logits = Forward(input);
 
-    // 3. Loss
+    // 3. Loss computation
     double lossValue = m_lossFunction->Forward(logits, label);
 
-    // 4. 예측 클래 스 판별
+    // 4. Class prediction determination
     auto* sce = dynamic_cast<loss::SoftmaxCrossEntropy*>(m_lossFunction.get());
     if (sce)
     {
@@ -117,11 +114,11 @@ double Model::TrainStep(const Tensor& input, int label, int& predicted)
         );
     }
 
-    // 5. Backward
+    // 5. Backward pass
     Tensor grad = m_lossFunction->Backward();
     Backward(grad);
 
-    // 6. Step
+    // 6. Parameter update
     m_optimizer->Step();
 
     return lossValue;

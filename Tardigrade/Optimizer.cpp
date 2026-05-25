@@ -5,14 +5,14 @@
 using namespace tardigrade;
 using namespace tardigrade::optimizer;
 
-// ==========================================
+// ------------------------------------------------------------
 // SGD Implementation
-// ==========================================
+// ------------------------------------------------------------
 SGD::SGD(double learningRate) : Optimizer(learningRate) {}
 
-// @brief Performs a single parameter update step using SGD.
-// Mathematical Formula:
-// W_t = W_{t-1} - \eta \nabla L(W_{t-1})
+/**
+ * @brief Performs a single parameter update step using SGD.
+ */
 void SGD::Step() 
 {
     for (auto& paramPair : m_parameters) 
@@ -21,7 +21,6 @@ void SGD::Step()
         Tensor* grad = paramPair.second;
             
         // W = W - lr * grad
-        // Vector operation using our Tensor class capabilities.
         const size_t size = weight->size();
         for (size_t i = 0; i < size; ++i) 
         {
@@ -30,7 +29,9 @@ void SGD::Step()
     }
 }
 
-// @brief Zeros out the gradients.
+/**
+ * @brief Resets the gradients of all registered parameters to zero.
+ */
 void SGD::ZeroGrad() 
 {
     for (auto& paramPair : m_parameters) 
@@ -44,9 +45,9 @@ void SGD::ZeroGrad()
     }
 }
 
-// ==========================================
+// ------------------------------------------------------------
 // Adam Implementation
-// ==========================================
+// ------------------------------------------------------------
 Adam::Adam(double learningRate, double beta1, double beta2, double epsilon)
         : Optimizer(learningRate), m_beta1(beta1), m_beta2(beta2), m_epsilon(epsilon), m_t(0), m_initialized(false) {}
 
@@ -69,13 +70,9 @@ void Adam::InitializeMoments()
     m_initialized = true;
 }
 
-// @brief Performs a single parameter update step using Adam.
-// Mathematical Formulas:
-// m_t = \beta_1 m_{t-1} + (1 - \beta_1) g_t
-// v_t = \beta_2 v_{t-1} + (1 - \beta_2) g_t^2
-// \hat{m}_t = \frac{m_t}{1 - \beta_1^t}
-// \hat{v}_t = \frac{v_t}{1 - \beta_2^t}
-// W_t = W_{t-1} - \eta \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon}
+/**
+ * @brief Performs a single parameter update step using Adam.
+ */
 void Adam::Step() 
 {
     if (!m_initialized) InitializeMoments();
@@ -114,8 +111,9 @@ void Adam::Step()
         }
     }
 }
-
-// @brief Zeros out the gradients.
+/**
+ * @brief Resets the gradients of all registered parameters to zero.
+ */
 void Adam::ZeroGrad() 
 {
     for (auto& paramPair : m_parameters) 

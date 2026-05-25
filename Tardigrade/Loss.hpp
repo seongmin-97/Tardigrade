@@ -8,57 +8,65 @@
 namespace tardigrade::loss
 {
     /**
-     * @brief Loss 추상 클래스
-     *
-     * 모든 손실 함수의 기반 클래스.
-     * Forward()로 손실값을 계산하고, Backward()로 gradient를 반환한다.
-     * Activation 클래스와 구조적으로 유사하지만, 역할이 근본적으로 다르다:
-     *   - Activation: 비선형 변환 (레이어 내부)
-     *   - Loss: 예측과 정답 사이의 오차 측정 (학습 목적)
+     * @brief Base class for loss functions.
+     * 
+     * Handles forward calculation of loss values and backward calculation of gradients.
      */
     class Loss
     {
     public:
+        /**
+         * @brief Construct a new Loss object.
+         * @param inputSize The size of the input features.
+         * @param batchSize The batch size.
+         */
         Loss(int inputSize, int batchSize);
         virtual ~Loss() = default;
 
         /**
-         * @brief 순전파: 예측값과 라벨로부터 손실값 계산
-         * @param prediction 모델의 출력 (logits 또는 확률)
-         * @param label 정답 라벨 (정수)
-         * @return 스칼라 손실값
+         * @brief Computes the forward pass of the loss function.
+         * @param prediction Model predictions of shape (inputSize, batchSize).
+         * @param label Ground truth integer label.
+         * @return The scalar loss value.
          */
         virtual double Forward(const Tensor& prediction, int label) = 0;
 
         /**
-         * @brief 역전파: 예측값에 대한 gradient 계산
-         * @return dL/d(prediction) gradient Tensor
+         * @brief Computes the backward pass (gradients) of the loss function.
+         * @return Gradient tensor of shape (inputSize, batchSize) representing dL/d(prediction).
          */
         virtual Tensor Backward() = 0;
 
     protected:
-        int m_inputSize;
-        int m_batchSize;
+        int m_inputSize;       ///< Input feature size (excluding batch dimension)
+        int m_batchSize;       ///< Batch size
 
-        Tensor m_prediction;   // Forward에서 캐시
-        Tensor m_gradient;     // Backward에서 계산
+        Tensor m_prediction;   ///< Cached predictions from forward pass
+        Tensor m_gradient;     ///< Cached gradients from backward pass
     };
 
     /**
-     * @brief Softmax + Cross-Entropy Loss 결합 손실 함수
-     *
-     * Softmax와 Cross-Entropy를 결합하면 backward gradient가
-     * 매우 깔끔하게 떨어지는 수학적 장점이 있다.
-     *
-     * Forward (Softmax):
-     *   σ(z)_k = exp(z_k - max(z)) / Σ_j exp(z_j - max(z))
-     *
-     * Forward (Cross-Entropy Loss):
-     *   L = -log(σ(z)_label + ε)
-     *
-     * Backward (Combined gradient):
-     *   dL/dz_k = σ(z)_k - y_k
-     *   where y_k = 1 if k == label, else 0 (one-hot)
+     * @brief Softmax Activation coupled with Cross-Entropy Loss.
+     * @note
+     * Combining Softmax and Cross-Entropy makes the gradient calculation mathematically simple and numerically stable.
+     * 
+     * Mathematical formulas:
+     * 
+     * Softmax Forward:
+     * \f[
+     * \sigma(z)_k = \frac{e^{z_k - \max(z)}}{\sum_j e^{z_j - \max(z)}}
+     * \f]
+     * 
+     * Cross-Entropy Loss:
+     * \f[
+     * L = -\log(\sigma(z)_{label} + \epsilon)
+     * \f]
+     * 
+     * Combined Gradient:
+     * \f[
+     * \frac{\partial L}{\partial z_k} = \sigma(z)_k - y_k
+     * \f]
+     * where \f$ y_k = 1 \f$ if \f$ k == label \f$, else \f$ 0 \f$ (one-hot vector representation).
      */
     class SoftmaxCrossEntropy : public Loss
     {
@@ -68,39 +76,56 @@ namespace tardigrade::loss
         double Forward(const Tensor& logits, int label) override;
         Tensor Backward() override;
 
-        /// 마지막 Forward의 softmax 확률 접근 (예측 클래스 판별용)
+        /**
+         * @brief Get cached softmax probabilities (used for class prediction).
+         * @return Reference to the probability tensor.
+         */
         const Tensor& GetProbs() const;
 
     private:
-        Tensor m_probs;   // softmax 출력 캐시
-        int m_label;      // Forward에서 사용한 라벨 캐시
+        Tensor m_probs;   ///< Cached softmax probabilities
+        int m_label;      ///< Cached label from forward pass
     };
 
     /**
-     * @brief Mean Squared Error (MSE) 손실 함수
-     *
-     * 회귀 문제를 위한 기본 손실 함수.
-     *
-     * Forward:
-     *   L = (1/n) Σ_i (y_pred_i - y_true_i)²
-     *
-     * Backward:
-     *   dL/dy_pred_i = (2/n)(y_pred_i - y_true_i)
+     * @brief Mean Squared Error (MSE) loss function for regression tasks.
+     * @note
+     * Mathematical formulas:
+     * 
+     * Forward Pass:
+     * \f[
+     * L = \frac{1}{n} \sum_{i=1}^n (y\_pred_i - y\_true_i)^2
+     * \f]
+     * 
+     * Backward Pass:
+     * \f[
+     * \frac{\partial L}{\partial y\_pred_i} = \frac{2}{n} (y\_pred_i - y\_true_i)
+     * \f]
      */
     class MSE : public Loss
     {
     public:
         MSE(int inputSize, int batchSize);
 
-        /// 회귀용 Forward: 예측값과 타겟 Tensor 비교
+        /**
+         * @brief Forward pass for regression tasks comparing prediction and target tensors.
+         * @param prediction Prediction tensor.
+         * @param target Target tensor.
+         * @return The scalar MSE loss value.
+         */
         double Forward(const Tensor& prediction, const Tensor& target);
 
-        /// 분류용 Forward: int label을 one-hot 변환 후 계산
+        /**
+         * @brief Forward pass converting integer label into a one-hot target tensor.
+         * @param prediction Prediction tensor.
+         * @param label Ground-truth label.
+         * @return The scalar MSE loss value.
+         */
         double Forward(const Tensor& prediction, int label) override;
 
         Tensor Backward() override;
 
     private:
-        Tensor m_target;  // Forward에서 사용한 타겟 캐시
+        Tensor m_target;  ///< Cached targets from forward pass
     };
 }

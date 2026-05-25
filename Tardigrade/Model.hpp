@@ -12,18 +12,10 @@
 namespace tardigrade::model
 {
     /**
-     * @brief Model — 학습 파이프라인 오케스트레이터
-     *
-     * Layer, Optimizer, Loss를 통합 관리하며,
-     * Forward/Backward/TrainStep 등 학습에 필요한 워크플로우를 제공한다.
-     *
-     * 사용 예시:
-     *   Model model;
-     *   model.AddLayer(std::make_unique<Dense>(784, 256, 1, ACTIVATION::ReLU));
-     *   model.SetLossFunction(std::make_unique<SoftmaxCrossEntropy>(10, 1));
-     *   model.SetOptimizer(std::make_unique<SGD>(0.01));
-     *   model.InitWeights();
-     *   double loss = model.TrainStep(input, label, predicted);
+     * @brief Orchestrator for the training and inference pipeline.
+     * 
+     * Integrates and manages Layer, Optimizer, and Loss objects, 
+     * providing high-level workflows like Forward, Backward, and TrainStep.
      */
     class Model
     {

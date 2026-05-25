@@ -9,8 +9,8 @@ Dense::Dense(int inputSize, int outputSize, int batchSize, ACTIVATION activation
 {
     m_batchSize = batchSize;
 	
-	m_inputSize = inputSize + 1; // Always use bias (augmented input)
-	m_outputSize = outputSize;
+    m_inputSize = inputSize + 1; // Always use bias (augmented input: input + bias)
+    m_outputSize = outputSize;
 
     m_weight = Tensor({ m_inputSize, m_outputSize });
     m_gradient = Tensor({ m_inputSize, m_outputSize });
@@ -42,7 +42,7 @@ Tensor Dense::Forward(const Tensor& input)
     if (rows != m_inputSize - 1)
         throw std::runtime_error("Input dimension mismatch in Dense::Forward. Expected " + std::to_string(m_inputSize - 1) + " but got " + std::to_string(rows));
 
-    m_inputMat.row(0).setConstant(1.0);
+    m_inputMat.row(0).setConstant(1.0); // Set bias row to constant 1.0
     m_inputMat.asMatrix(m_inputSize, m_batchSize).bottomRows(rows) = input.asMatrix(rows, cols);
 
     m_outputMat = m_activation->Forward(m_weight.transpose() * m_inputMat);
@@ -130,7 +130,8 @@ void Dense::InitWeight()
     std::random_device rd;
     std::mt19937 gen(rd());
 
-    // Bias 항을 제외한 실제 입력 뉴런 수(m_inputSize - 1)를 기준으로 계산
+    // He initialization standard deviation: sqrt(2.0 / fan_in)
+    // where fan_in is the actual input neurons (excluding bias)
     double stddev = std::sqrt(2.0 / static_cast<double>(m_inputSize - 1));
 
     std::normal_distribution<double> dist(0.0, stddev);
@@ -142,7 +143,7 @@ void Dense::InitWeight()
         for (int j = 0; j < col; ++j)
             m_weight(i, j) = dist(gen);
 
-    // 상숫값(1.0)과 곱해지는 Bias 항은 0으로 초기화
+    // Initialize the bias weight vector (multiplied by constant 1.0) to zero
     m_weight.row(0).setZero();
 }
 

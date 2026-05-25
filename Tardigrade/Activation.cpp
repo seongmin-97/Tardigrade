@@ -41,16 +41,12 @@ Tensor ReLU::Backward(const Tensor& input)
 	return m_gradient;
 }
 
-// ============================================================
+// ------------------------------------------------------------
 // Softmax Activation
-// ============================================================
+// ------------------------------------------------------------
 
 /**
- * @brief Softmax 순전파 (numerically stable)
- *
- * σ(z)_k = exp(z_k - max(z)) / Σ_j exp(z_j - max(z))
- *
- * max(z) 를 빼서 exp의 오버플로우를 방지한다.
+ * @brief Computes the forward pass of Softmax activation (numerically stable).
  */
 Tensor Softmax::Forward(const Tensor& input)
 {
@@ -78,17 +74,7 @@ Tensor Softmax::Forward(const Tensor& input)
 }
 
 /**
- * @brief Softmax 역전파 (Jacobian 기반)
- *
- * Softmax Jacobian:
- *   dσ_i/dz_j = σ_i(δ_ij - σ_j)
- *
- * Chain rule 적용 후 간소화:
- *   dL/dz_i = Σ_j (dL/dσ_j) · σ_j · (δ_ij - σ_i)
- *           = σ_i · (dL/dσ_i - Σ_j dL/dσ_j · σ_j)
- *           = σ_i · (dL/dσ_i - dot)
- *
- * where dot = Σ_j dL/dσ_j · σ_j
+ * @brief Computes the backward pass of Softmax activation using Jacobian matrix.
  */
 Tensor Softmax::Backward(const Tensor& gradOutput)
 {
@@ -96,14 +82,14 @@ Tensor Softmax::Backward(const Tensor& gradOutput)
 
 	m_gradient = Tensor(m_outputVector.shape());
 
-	// dot = Σ_j dL/dσ_j · σ_j
+	// dot = sum_j (dL/d_sigma_j) * sigma_j
 	double dot = 0.0;
 	for (int i = 0; i < n; ++i)
 	{
 		dot += gradOutput[i] * m_outputVector[i];
 	}
 
-	// dL/dz_i = σ_i · (dL/dσ_i - dot)
+	// dL/dz_i = sigma_i * (dL/d_sigma_i - dot)
 	for (int i = 0; i < n; ++i)
 	{
 		m_gradient[i] = m_outputVector[i] * (gradOutput[i] - dot);

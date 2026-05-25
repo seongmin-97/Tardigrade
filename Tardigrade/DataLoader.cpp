@@ -3,9 +3,9 @@
 using namespace tardigrade;
 using namespace tardigrade::data;
 
-// ============================================================
+// ------------------------------------------------------------
 // Constructor
-// ============================================================
+// ------------------------------------------------------------
 DataLoader::DataLoader(LoadStrategy strategy)
     : m_strategy(strategy),
       m_targetSize({0, 0}),
@@ -13,16 +13,9 @@ DataLoader::DataLoader(LoadStrategy strategy)
 {
 }
 
-// ============================================================
-// ReadImage: 이미지 파일 → 정규화된 Tensor
-//
-// 두 구현(기존 DataLoader + main.cpp)의 장점을 결합:
-//   - main.cpp의 리사이즈 + 예외 기반 에러 처리
-//   - DataLoader의 멀티채널(1ch/3ch) 지원
-//   - 바로 올바른 크기의 Tensor 생성 (reshape 불필요)
-//
-// 정규화: pixel_value / 255.0 → [0.0, 1.0]
-// ============================================================
+// ------------------------------------------------------------
+// ReadImage: Reads image file and returns a normalized Tensor [0.0, 1.0]
+// ------------------------------------------------------------
 Tensor DataLoader::ReadImage(const std::string& path, MatSize target, int flag) const
 {
     cv::Mat img = cv::imread(path, flag);
@@ -73,12 +66,12 @@ Tensor DataLoader::ReadImage(const std::string& path, MatSize target, int flag) 
     return result;
 }
 
-// ============================================================
-// LoadImageDataset: 디렉토리 구조에서 이미지 데이터셋 로딩
+// ------------------------------------------------------------
+// LoadImageDataset: Loads image dataset from directory structure
 //
-// 디렉토리 규약: rootDir/{0~9}/*.{jpg,png,...}
-// 폴더 이름이 라벨 값으로 사용됨
-// ============================================================
+// Assumes directory structure: rootDir/{0~9}/*.{jpg,png,...}
+// Folder names are used as integer labels.
+// ------------------------------------------------------------
 void DataLoader::LoadImageDataset(const std::string& rootDir, MatSize target, int flag)
 {
     m_targetSize = target;
@@ -137,9 +130,9 @@ void DataLoader::LoadImageDataset(const std::string& rootDir, MatSize target, in
               << " (strategy: " << (m_strategy == LoadStrategy::EAGER ? "EAGER" : "LAZY") << ")\n";
 }
 
-// ============================================================
-// 접근자
-// ============================================================
+// ------------------------------------------------------------
+// Getters
+// ------------------------------------------------------------
 size_t DataLoader::GetDataSize() const
 {
     return m_labels.size();
@@ -172,9 +165,9 @@ int DataLoader::GetLabel(size_t index) const
     return m_labels[index];
 }
 
-// ============================================================
-// 배치 반환
-// ============================================================
+// ------------------------------------------------------------
+// Batch Retrieval
+// ------------------------------------------------------------
 Tensor DataLoader::GetBatch(size_t startIdx, size_t batchSize) const
 {
     if (startIdx >= GetDataSize() || batchSize == 0)
@@ -212,9 +205,9 @@ std::vector<int> DataLoader::GetLabelBatch(size_t startIdx, size_t batchSize) co
     );
 }
 
-// ============================================================
-// Shuffle: 인덱스 기반 셔플 (Eager/Lazy 공통)
-// ============================================================
+// ------------------------------------------------------------
+// Shuffle: Shuffle index arrays (Works for Eager/Lazy)
+// ------------------------------------------------------------
 void DataLoader::Shuffle(std::mt19937& rng)
 {
     size_t n = GetDataSize();

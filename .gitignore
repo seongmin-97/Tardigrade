@@ -4,9 +4,11 @@
 *.userosscache
 *.sln.docstates
 
-## [ Antigravity ]
+## [ Antigravity & IDE Settings ]
 .agents/
 Docs/
+.clangd
+.vscode/
 
 ## [ CMake Build Outputs ]
 build/
@@ -39,14 +41,9 @@ obj/
 *.lastbuildstate
 *.idb
 
-## [ External Libraries (OpenCV, Eigen) ]
-external/build/
-external/opencv/
-
-## [ macOS ]
-.DS_Store
-
 ## [ Others ]
 *.log
 *.tmp
 *.cache
+
+.DS_Store
