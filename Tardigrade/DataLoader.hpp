@@ -35,7 +35,7 @@ namespace fs = std::filesystem;
 /**
  * @brief DataLoader - Handles image loading, preprocessing, and batch generation.
  * 
- * It scans the directory structure (assumes rootDir/{label}/*) and manages data access.
+ * It scans the directory structure (assumes rootDir/{label}/<files>) and manages data access.
  */
 class DataLoader {
 public:

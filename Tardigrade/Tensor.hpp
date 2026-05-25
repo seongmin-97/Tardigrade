@@ -14,6 +14,14 @@ namespace tardigrade
     using ConstMatrixMap = Eigen::Map<const Eigen::MatrixXd>;
     using ConstVectorMap = Eigen::Map<const Eigen::VectorXd>;
 
+    /**
+     * @brief A multi-dimensional tensor class wrapping Eigen vectors/matrices.
+     *
+     * This class acts as the foundational data structure for the Tardigrade framework.
+     * It manages multi-dimensional data in a flat `std::vector` and provides
+     * zero-copy mappings to Eigen::Matrix and Eigen::Vector for high-performance
+     * operations.
+     */
     class Tensor
     {
     private:
@@ -21,14 +29,28 @@ namespace tardigrade
         Shape m_shape;
 
     public:
+        /**
+         * @brief Constructs a tensor with the given shape.
+         * @param shape The dimensions of the tensor (e.g., {rows, cols}).
+         */
         Tensor(const std::vector<int>& shape) : m_shape(shape)
         {
             long long totalSize = std::accumulate(shape.begin(), shape.end(), 1LL, std::multiplies<int>());
             m_data.resize(totalSize, 0.0);
         }
 
+        /**
+         * @brief Default constructor.
+         */
         Tensor() = default;
 
+        /**
+         * @brief Maps the underlying data to an Eigen Matrix.
+         * @param rows The number of rows.
+         * @param cols The number of columns.
+         * @return Eigen::Map<Eigen::MatrixXd> mapped to the tensor's memory.
+         * @throw std::runtime_error if dimensions do not match the total size.
+         */
         MatrixMap asMatrix(int rows, int cols)
         {
             if (rows * cols != m_data.size())
@@ -37,22 +59,42 @@ namespace tardigrade
             return MatrixMap(m_data.data(), rows, cols);
         }
 
+        /**
+         * @brief Maps the underlying data to a constant Eigen Matrix.
+         * @param rows The number of rows.
+         * @param cols The number of columns.
+         * @return Eigen::Map<const Eigen::MatrixXd> mapped to the tensor's memory.
+         * @throw std::runtime_error if dimensions do not match the total size.
+         */
         ConstMatrixMap asMatrix(int rows, int cols) const {
             if (rows * cols != static_cast<int>(m_data.size()))
                 throw std::runtime_error("Size mismatch");
             return ConstMatrixMap(m_data.data(), rows, cols);
         }
 
+        /**
+         * @brief Maps the underlying data to an Eigen Vector.
+         * @return Eigen::Map<Eigen::VectorXd> mapped to the tensor's memory.
+         */
         VectorMap asVector()
         {
             return VectorMap(m_data.data(), m_data.size());
         }
 
+        /**
+         * @brief Maps the underlying data to a constant Eigen Vector.
+         * @return Eigen::Map<const Eigen::VectorXd> mapped to the tensor's memory.
+         */
         ConstVectorMap asVector() const 
         {
             return ConstVectorMap(m_data.data(), static_cast<Eigen::Index>(m_data.size()));
         }
 
+        /**
+         * @brief Reshapes the tensor in-place.
+         * @param newShape The new dimensions for the tensor.
+         * @throw std::runtime_error if the new size doesn't match the original size.
+         */
         void reshape(const std::vector<int>& newShape)
         {
             long long newSize = std::accumulate(newShape.begin(), newShape.end(), 1LL, std::multiplies<int>());
@@ -63,6 +105,11 @@ namespace tardigrade
             m_shape = newShape;
         }
 
+        /**
+         * @brief Transposes a 2D tensor.
+         * @return A new transposed Tensor.
+         * @throw std::runtime_error if the tensor is not 2-dimensional.
+         */
         Tensor transpose() const 
         {
             if (m_shape.size() != 2) 
@@ -76,6 +123,12 @@ namespace tardigrade
             return result;
         }
 
+        /**
+         * @brief Retrieves a specific row from a 2D tensor.
+         * @param i The row index.
+         * @return Eigen representation of the row.
+         * @throw std::runtime_error if the tensor is not 2-dimensional.
+         */
         auto row(int i) 
         {
             if (m_shape.size() != 2) 
@@ -84,6 +137,12 @@ namespace tardigrade
             return asMatrix(m_shape[0], m_shape[1]).row(i);
         }
 
+        /**
+         * @brief Retrieves a specific column from a 2D tensor.
+         * @param j The column index.
+         * @return Eigen representation of the column.
+         * @throw std::runtime_error if the tensor is not 2-dimensional.
+         */
         auto col(int j) {
             if (m_shape.size() != 2) 
                 throw std::runtime_error("col() can only be called on 2D tensors (Matrices).");
@@ -91,16 +150,52 @@ namespace tardigrade
             return asMatrix(m_shape[0], m_shape[1]).col(j);
         }
 
+        /**
+         * @brief Returns the rank (number of dimensions) of the tensor.
+         * @return Number of dimensions.
+         */
         int rank() const { return m_shape.size(); }
+
+        /**
+         * @brief Returns the size of a specific dimension.
+         * @param index The dimension index.
+         * @return Size of the specified dimension.
+         */
         int dim(int index) const { return m_shape.at(index); }
+
+        /**
+         * @brief Returns the shape of the tensor.
+         * @return Shape vector.
+         */
         const std::vector<int>& shape() const { return m_shape; }
+
+        /**
+         * @brief Returns a pointer to the underlying raw data.
+         * @return Raw data pointer.
+         */
         double* data() { return m_data.data(); }
+
+        /**
+         * @brief Returns a constant pointer to the underlying raw data.
+         * @return Constant raw data pointer.
+         */
         const double* data() const { return m_data.data(); }
+
+        /**
+         * @brief Returns the total number of elements in the tensor.
+         * @return Total size.
+         */
         size_t size() const { return m_data.size(); }
         
         double& operator[](size_t index) { return m_data[index]; }
         const double& operator[](size_t index) const { return m_data[index]; }
 
+        /**
+         * @brief Accesses an element given multi-dimensional indices.
+         * @tparam Args Parameter pack for indices.
+         * @param indices Indices of the element.
+         * @return Reference to the element.
+         */
         template<typename... Args>
         double& operator()(Args... indices) 
         {
@@ -108,6 +203,12 @@ namespace tardigrade
             return m_data[calculateIndex(idx)];
         }
 
+        /**
+         * @brief Performs matrix multiplication.
+         * @param other The right-hand side tensor.
+         * @return Resulting Tensor of the multiplication.
+         * @throw std::runtime_error on dimension mismatch.
+         */
         Tensor operator*(const Tensor& other) const 
         {
             int a_rows = this->dim(0);
@@ -133,6 +234,12 @@ namespace tardigrade
             return result;
         }
 
+        /**
+         * @brief Performs element-wise addition.
+         * @param other The right-hand side tensor.
+         * @return Resulting Tensor.
+         * @throw std::runtime_error on shape mismatch.
+         */
         Tensor operator+(const Tensor& other) const 
         {
             if (m_shape != other.m_shape)
@@ -144,6 +251,12 @@ namespace tardigrade
             return result;
         }
 
+        /**
+         * @brief Performs element-wise subtraction.
+         * @param other The right-hand side tensor.
+         * @return Resulting Tensor.
+         * @throw std::runtime_error on shape mismatch.
+         */
         Tensor operator-(const Tensor& other) const 
         {
             if (m_shape != other.m_shape)
@@ -155,6 +268,11 @@ namespace tardigrade
             return result;
         }
 
+        /**
+         * @brief Multiplies tensor elements by a scalar.
+         * @param scalar The scalar value.
+         * @return Resulting Tensor.
+         */
         Tensor operator*(double scalar) const 
         {
             Tensor result(m_shape);
@@ -168,6 +286,12 @@ namespace tardigrade
             return tensor * scalar;
         }
 
+        /**
+         * @brief Divides tensor elements by a scalar.
+         * @param scalar The scalar value.
+         * @return Resulting Tensor.
+         * @throw std::runtime_error if scalar is zero.
+         */
         Tensor operator/(double scalar) const 
         {
             if (scalar == 0.0)
@@ -179,6 +303,11 @@ namespace tardigrade
             return result;
         }
 
+        /**
+         * @brief Applies a minimum clamp (lower bound) to all elements.
+         * @param threshold The minimum value allowed.
+         * @return Clamped Tensor.
+         */
         Tensor clampedMin(double threshold) const 
         {
             Tensor result(m_shape);
@@ -187,6 +316,10 @@ namespace tardigrade
             return result;
         }
 
+        /**
+         * @brief Applies a unit step function to all elements.
+         * @return Tensor where elements > 0 are 1.0, otherwise 0.0.
+         */
         Tensor step() const 
         {
             Tensor result(m_shape);
@@ -195,6 +328,12 @@ namespace tardigrade
             return result;
         }
 
+        /**
+         * @brief Performs element-wise (Hadamard) multiplication.
+         * @param other The right-hand side tensor.
+         * @return Resulting Tensor.
+         * @throw std::runtime_error on shape mismatch.
+         */
         Tensor cwiseMul(const Tensor& other) const 
         {
             if (m_shape != other.m_shape)
@@ -206,6 +345,12 @@ namespace tardigrade
             return result;
         }
 
+        /**
+         * @brief Performs element-wise division.
+         * @param other The right-hand side tensor.
+         * @return Resulting Tensor.
+         * @throw std::runtime_error on shape mismatch.
+         */
         Tensor cwiseDiv(const Tensor& other) const 
         {
             if (m_shape != other.m_shape)
@@ -218,6 +363,11 @@ namespace tardigrade
         }
 
     private:
+        /**
+         * @brief Calculates a flat index from a multi-dimensional index array.
+         * @param indices Multi-dimensional indices.
+         * @return Flattened index.
+         */
         int calculateIndex(const std::vector<int>& indices) const 
         {
             int flatIndex = 0;
