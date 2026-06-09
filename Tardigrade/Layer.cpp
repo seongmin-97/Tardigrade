@@ -103,12 +103,19 @@ void Dense::SetOutputSize(int outputSize)
 void Dense::SetBatchSize(int batchSize)
 {
     if (batchSize == m_batchSize)
+    {
         return;
+    }
 
     m_batchSize = batchSize;
 
     m_inputMat.reshape({ m_inputSize, m_batchSize });
     m_outputMat.reshape({ m_outputSize, m_batchSize });
+
+    if (m_activation)
+    {
+        m_activation->SetBatchSize(batchSize);
+    }
 }
 
 void Dense::SetActivation(ACTIVATION activation)

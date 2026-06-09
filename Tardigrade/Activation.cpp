@@ -16,6 +16,20 @@ Activation::Activation(int inputSize, int batchSize)
 	m_gradient = Tensor({ m_batchSize, m_size });
 }
 
+void Activation::SetBatchSize(int batchSize)
+{
+    if (m_batchSize == batchSize)
+    {
+        return;
+    }
+
+    m_batchSize = batchSize;
+
+    m_inputVector = Tensor({ m_batchSize, m_size });
+    m_outputVector = Tensor({ m_batchSize, m_size });
+    m_gradient = Tensor({ m_batchSize, m_size });
+}
+
 Tensor None::Forward(const Tensor& input)
 {
 	return input;

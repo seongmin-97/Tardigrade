@@ -42,6 +42,12 @@ namespace tardigrade::activation
 		 */
 		virtual Tensor Backward(const Tensor& input) = 0;
 
+		/**
+		 * @brief Set the batch size for calculations dynamically.
+		 * @param batchSize The new batch size.
+		 */
+		virtual void SetBatchSize(int batchSize);
+
 	protected :
 		Tensor m_inputVector;  ///< Cached input tensor from forward pass
 		Tensor m_outputVector; ///< Cached output tensor from forward pass
