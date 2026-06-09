@@ -46,54 +46,75 @@ Tensor ReLU::Backward(const Tensor& input)
 // ------------------------------------------------------------
 
 /**
- * @brief Computes the forward pass of Softmax activation (numerically stable).
+ * @brief Computes the forward pass of Softmax activation per sample.
+ * @note
+ * Mathematical formula for column i, class k:
+ * \sigma(z)_{k, i} = e^{z_{k, i} - \max_j(z_{j, i})} / \sum_j e^{z_{j, i} - \max_j(z_{j, i})}
  */
 Tensor Softmax::Forward(const Tensor& input)
 {
-	m_inputVector = input;
+    m_inputVector = input;
 
-	int n = static_cast<int>(input.size());
+    m_batchSize = (input.rank() == 1) ? 1 : input.dim(1);
 
-	double maxVal = *std::max_element(input.data(), input.data() + n);
+    if (m_outputVector.shape() != input.shape())
+    {
+        m_outputVector.reshape(input.shape());
+    }
 
-	m_outputVector = Tensor(input.shape());
-	double sumExp = 0.0;
+    for (int i = 0; i < m_batchSize; ++i)
+    {
+        double maxVal = input(0, i);
+        for (int j = 1; j < m_size; ++j)
+        {
+            if (input(j, i) > maxVal)
+            {
+                maxVal = input(j, i);
+            }
+        }
 
-	for (int i = 0; i < n; ++i)
-	{
-		m_outputVector[i] = std::exp(input[i] - maxVal);
-		sumExp += m_outputVector[i];
-	}
+        double sumExp = 0.0;
+        for (int j = 0; j < m_size; ++j)
+        {
+            m_outputVector(j, i) = std::exp(input(j, i) - maxVal);
+            sumExp += m_outputVector(j, i);
+        }
 
-	for (int i = 0; i < n; ++i)
-	{
-		m_outputVector[i] /= sumExp;
-	}
+        for (int j = 0; j < m_size; ++j)
+        {
+            m_outputVector(j, i) /= sumExp;
+        }
+    }
 
-	return m_outputVector;
+    return m_outputVector;
 }
 
 /**
- * @brief Computes the backward pass of Softmax activation using Jacobian matrix.
+ * @brief Computes the backward pass of Softmax activation per sample.
+ * @note
+ * Mathematical formula for column i, class k:
+ * dL/dz_{k, i} = \sigma_{k, i} * (dL/d\sigma_{k, i} - \sum_j dL/d\sigma_{j, i} * \sigma_{j, i})
  */
 Tensor Softmax::Backward(const Tensor& gradOutput)
 {
-	int n = static_cast<int>(m_outputVector.size());
+    if (m_gradient.shape() != m_outputVector.shape())
+    {
+        m_gradient.reshape(m_outputVector.shape());
+    }
 
-	m_gradient = Tensor(m_outputVector.shape());
+    for (int i = 0; i < m_batchSize; ++i)
+    {
+        double dot = 0.0;
+        for (int j = 0; j < m_size; ++j)
+        {
+            dot += gradOutput(j, i) * m_outputVector(j, i);
+        }
 
-	// dot = sum_j (dL/d_sigma_j) * sigma_j
-	double dot = 0.0;
-	for (int i = 0; i < n; ++i)
-	{
-		dot += gradOutput[i] * m_outputVector[i];
-	}
+        for (int j = 0; j < m_size; ++j)
+        {
+            m_gradient(j, i) = m_outputVector(j, i) * (gradOutput(j, i) - dot);
+        }
+    }
 
-	// dL/dz_i = sigma_i * (dL/d_sigma_i - dot)
-	for (int i = 0; i < n; ++i)
-	{
-		m_gradient[i] = m_outputVector[i] * (gradOutput[i] - dot);
-	}
-
-	return m_gradient;
+    return m_gradient;
 }

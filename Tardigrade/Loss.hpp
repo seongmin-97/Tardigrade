@@ -26,10 +26,10 @@ namespace tardigrade::loss
         /**
          * @brief Computes the forward pass of the loss function.
          * @param prediction Model predictions of shape (inputSize, batchSize).
-         * @param label Ground truth integer label.
+         * @param target Ground truth target tensor.
          * @return The scalar loss value.
          */
-        virtual double Forward(const Tensor& prediction, int label) = 0;
+        virtual double Forward(const Tensor& prediction, const Tensor& target) = 0;
 
         /**
          * @brief Computes the backward pass (gradients) of the loss function.
@@ -54,26 +54,27 @@ namespace tardigrade::loss
      * 
      * Softmax Forward:
      * \f[
-     * \sigma(z)_k = \frac{e^{z_k - \max(z)}}{\sum_j e^{z_j - \max(z)}}
+     * \sigma(z)_{k, i} = \frac{e^{z_{k, i} - \max_j(z_{j, i})}}{\sum_j e^{z_{j, i} - \max_j(z_{j, i})}}
      * \f]
+     * where $k$ is the class index and $i$ is the batch index.
      * 
-     * Cross-Entropy Loss:
+     * Cross-Entropy Loss (Mean over batch):
      * \f[
-     * L = -\log(\sigma(z)_{label} + \epsilon)
+     * L = -\frac{1}{N} \sum_{i=1}^N \log(\sigma(z)_{target_i, i} + \epsilon)
      * \f]
      * 
      * Combined Gradient:
      * \f[
-     * \frac{\partial L}{\partial z_k} = \sigma(z)_k - y_k
+     * \frac{\partial L}{\partial z_{k, i}} = \frac{1}{N} (\sigma(z)_{k, i} - y_{k, i})
      * \f]
-     * where \f$ y_k = 1 \f$ if \f$ k == label \f$, else \f$ 0 \f$ (one-hot vector representation).
+     * where \f$ y_{k, i} = 1 \f$ if \f$ k == target_i \f$, else \f$ 0 \f$.
      */
     class SoftmaxCrossEntropy : public Loss
     {
     public:
         SoftmaxCrossEntropy(int inputSize, int batchSize);
 
-        double Forward(const Tensor& logits, int label) override;
+        double Forward(const Tensor& logits, const Tensor& target) override;
         Tensor Backward() override;
 
         /**
@@ -84,7 +85,7 @@ namespace tardigrade::loss
 
     private:
         Tensor m_probs;   ///< Cached softmax probabilities
-        int m_label;      ///< Cached label from forward pass
+        Tensor m_target;  ///< Cached target labels from forward pass
     };
 
     /**
@@ -92,14 +93,15 @@ namespace tardigrade::loss
      * @note
      * Mathematical formulas:
      * 
-     * Forward Pass:
+     * Forward Pass (Mean over batch and features):
      * \f[
-     * L = \frac{1}{n} \sum_{i=1}^n (y\_pred_i - y\_true_i)^2
+     * L = \frac{1}{B \cdot C} \sum_{i=1}^B \sum_{j=1}^C (y\_pred_{j, i} - y\_true_{j, i})^2
      * \f]
+     * where $B$ is the batch size and $C$ is the feature size (inputSize).
      * 
      * Backward Pass:
      * \f[
-     * \frac{\partial L}{\partial y\_pred_i} = \frac{2}{n} (y\_pred_i - y\_true_i)
+     * \frac{\partial L}{\partial y\_pred_{j, i}} = \frac{2}{B \cdot C} (y\_pred_{j, i} - y\_true_{j, i})
      * \f]
      */
     class MSE : public Loss
@@ -113,15 +115,7 @@ namespace tardigrade::loss
          * @param target Target tensor.
          * @return The scalar MSE loss value.
          */
-        double Forward(const Tensor& prediction, const Tensor& target);
-
-        /**
-         * @brief Forward pass converting integer label into a one-hot target tensor.
-         * @param prediction Prediction tensor.
-         * @param label Ground-truth label.
-         * @return The scalar MSE loss value.
-         */
-        double Forward(const Tensor& prediction, int label) override;
+        double Forward(const Tensor& prediction, const Tensor& target) override;
 
         Tensor Backward() override;
 

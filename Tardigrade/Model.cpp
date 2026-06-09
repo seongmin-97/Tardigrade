@@ -82,7 +82,7 @@ void Model::Backward(const Tensor& gradOutput)
 // 5. Backward     - Backpropagates loss gradient
 // 6. Step         - Updates parameters using the optimizer
 // ------------------------------------------------------------
-double Model::TrainStep(const Tensor& input, int label, int& predicted)
+double Model::TrainStep(const Tensor& input, const Tensor& target, Tensor& predicted)
 {
     if (!m_optimizer || !m_lossFunction)
     {
@@ -96,22 +96,33 @@ double Model::TrainStep(const Tensor& input, int label, int& predicted)
     Tensor logits = Forward(input);
 
     // 3. Loss computation
-    double lossValue = m_lossFunction->Forward(logits, label);
+    double lossValue = m_lossFunction->Forward(logits, target);
 
-    // 4. Class prediction determination
-    auto* sce = dynamic_cast<loss::SoftmaxCrossEntropy*>(m_lossFunction.get());
-    if (sce)
+    // 4. Class prediction determination (Argmax per column)
+    int C = logits.dim(0);
+    int B = (logits.rank() == 1) ? 1 : logits.dim(1);
+
+    if (predicted.shape() != std::vector<int>{ 1, B })
     {
-        const Tensor& probs = sce->GetProbs();
-        predicted = static_cast<int>(
-            std::max_element(probs.data(), probs.data() + probs.size()) - probs.data()
-        );
+        predicted = Tensor({ 1, B });
     }
-    else
+
+    auto* sce = dynamic_cast<loss::SoftmaxCrossEntropy*>(m_lossFunction.get());
+    const Tensor& scoreTensor = (sce != nullptr) ? sce->GetProbs() : logits;
+
+    for (int i = 0; i < B; ++i)
     {
-        predicted = static_cast<int>(
-            std::max_element(logits.data(), logits.data() + logits.size()) - logits.data()
-        );
+        double maxVal = scoreTensor(0, i);
+        int argMax = 0;
+        for (int j = 1; j < C; ++j)
+        {
+            if (scoreTensor(j, i) > maxVal)
+            {
+                maxVal = scoreTensor(j, i);
+                argMax = j;
+            }
+        }
+        predicted[i] = static_cast<double>(argMax);
     }
 
     // 5. Backward pass

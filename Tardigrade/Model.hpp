@@ -34,7 +34,7 @@ namespace tardigrade::model
 
         void Backward(const Tensor& gradOutput);
 
-        double TrainStep(const Tensor& input, int label, int& predicted);
+        double TrainStep(const Tensor& input, const Tensor& target, Tensor& predicted);
 
         Tensor Predict(const Tensor& input);
 

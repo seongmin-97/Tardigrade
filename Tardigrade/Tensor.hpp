@@ -9,9 +9,10 @@ namespace tardigrade
     using Data = std::vector<double>;
     using Shape = std::vector<int>;
 
-    using MatrixMap = Eigen::Map<Eigen::MatrixXd>;
+    using MatrixXdRowMajor = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+    using MatrixMap = Eigen::Map<MatrixXdRowMajor>;
     using VectorMap = Eigen::Map<Eigen::VectorXd>;
-    using ConstMatrixMap = Eigen::Map<const Eigen::MatrixXd>;
+    using ConstMatrixMap = Eigen::Map<const MatrixXdRowMajor>;
     using ConstVectorMap = Eigen::Map<const Eigen::VectorXd>;
 
     /**
@@ -190,14 +191,21 @@ namespace tardigrade
         double& operator[](size_t index) { return m_data[index]; }
         const double& operator[](size_t index) const { return m_data[index]; }
 
-        /**
-         * @brief Accesses an element given multi-dimensional indices.
-         * @tparam Args Parameter pack for indices.
-         * @param indices Indices of the element.
-         * @return Reference to the element.
-         */
         template<typename... Args>
         double& operator()(Args... indices) 
+        {
+            std::vector<int> idx = { static_cast<int>(indices)... };
+            return m_data[calculateIndex(idx)];
+        }
+
+        /**
+         * @brief Accesses an element given multi-dimensional indices (const version).
+         * @tparam Args Parameter pack for indices.
+         * @param indices Indices of the element.
+         * @return The element value.
+         */
+        template<typename... Args>
+        double operator()(Args... indices) const
         {
             std::vector<int> idx = { static_cast<int>(indices)... };
             return m_data[calculateIndex(idx)];

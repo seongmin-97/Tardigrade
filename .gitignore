@@ -45,5 +45,6 @@ obj/
 *.log
 *.tmp
 *.cache
+API_References/
 
 .DS_Store

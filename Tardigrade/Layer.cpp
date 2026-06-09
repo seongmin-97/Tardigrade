@@ -40,7 +40,14 @@ Tensor Dense::Forward(const Tensor& input)
     int cols = (input.rank() == 1) ? 1 : input.dim(1);
 
     if (rows != m_inputSize - 1)
+    {
         throw std::runtime_error("Input dimension mismatch in Dense::Forward. Expected " + std::to_string(m_inputSize - 1) + " but got " + std::to_string(rows));
+    }
+
+    if (cols != m_batchSize)
+    {
+        SetBatchSize(cols);
+    }
 
     m_inputMat.row(0).setConstant(1.0); // Set bias row to constant 1.0
     m_inputMat.asMatrix(m_inputSize, m_batchSize).bottomRows(rows) = input.asMatrix(rows, cols);
