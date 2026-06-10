@@ -100,8 +100,10 @@ namespace tardigrade
         {
             long long newSize = std::accumulate(newShape.begin(), newShape.end(), 1LL, std::multiplies<int>());
 
-            if (newSize != m_data.size())
-                throw std::runtime_error("Shape mismatch for reshape.");
+            if (newSize != static_cast<long long>(m_data.size()))
+            {
+                m_data.resize(newSize, 0.0);
+            }
 
             m_shape = newShape;
         }

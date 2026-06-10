@@ -8,6 +8,7 @@
 .agents/
 Docs/
 .clangd
+.clang-format
 .vscode/
 
 ## [ CMake Build Outputs ]
