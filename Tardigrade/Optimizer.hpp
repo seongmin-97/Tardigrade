@@ -4,8 +4,10 @@
 
 #include "Tensor.hpp"
 
-namespace tardigrade {
-namespace optimizer {
+namespace tardigrade
+{
+namespace optimizer
+{
 /**
  * @brief Pair of pointers pointing to a weight tensor and its corresponding
  * gradient tensor.
@@ -17,41 +19,48 @@ using ParamGradPair = std::pair<Tensor *, Tensor *>;
  *
  * Manages network parameter updates using their computed gradients.
  */
-class Optimizer {
+class Optimizer
+{
 protected:
-  std::vector<ParamGradPair>
-      m_parameters;      ///< Registered parameters (weight, gradient) pairs
-  double m_learningRate; ///< Learning rate
+    std::vector<ParamGradPair> m_parameters; ///< Registered parameters (weight, gradient) pairs
+    double m_learningRate;                   ///< Learning rate
 
 public:
-  /**
-   * @brief Construct a new Optimizer object.
-   * @param learningRate The learning rate.
-   */
-  Optimizer(double learningRate) : m_learningRate(learningRate) {}
-  virtual ~Optimizer() = default;
+    /**
+     * @brief Construct a new Optimizer object.
+     * @param learningRate The learning rate.
+     */
+    Optimizer(double learningRate) : m_learningRate(learningRate) {}
+    virtual ~Optimizer() = default;
 
-  /**
-   * @brief Registers parameter and gradient tensor pairs to the optimizer.
-   * @param params Vector of ParamGradPair pointers.
-   */
-  void AddParameters(const std::vector<ParamGradPair> &params) {
-    for (const auto &pair : params) {
-      if (pair.first->shape() != pair.second->shape())
-        throw std::runtime_error("Parameter and gradient shape mismatch.");
+    /**
+     * @brief Registers parameter and gradient tensor pairs to the optimizer.
+     * @param params Vector of ParamGradPair pointers.
+     */
+    void AddParameters(const std::vector<ParamGradPair> &params)
+    {
+        for (const auto &pair : params)
+        {
+            if (pair.first->shape() != pair.second->shape())
+                throw std::runtime_error("Parameter and gradient shape mismatch.");
+        }
+        m_parameters.insert(m_parameters.end(), params.begin(), params.end());
     }
-    m_parameters.insert(m_parameters.end(), params.begin(), params.end());
-  }
 
-  /**
-   * @brief Performs a single parameter update step.
-   */
-  virtual void Step() = 0;
+    /**
+     * @brief Performs a single parameter update step.
+     */
+    virtual void Step() = 0;
 
-  /**
-   * @brief Resets the gradients of all registered parameters to zero.
-   */
-  virtual void ZeroGrad() = 0;
+    /**
+     * @brief Resets the gradients of all registered parameters to zero.
+     * @note
+     * Mathematical formula:
+     * \f[
+     * \nabla L(W) \leftarrow \mathbf{0}
+     * \f]
+     */
+    virtual void ZeroGrad();
 };
 
 /**
@@ -63,12 +72,12 @@ public:
  * \f]
  * where \f$ \eta \f$ is the learning rate and \f$ \nabla L \f$ is the gradient.
  */
-class SGD : public Optimizer {
+class SGD : public Optimizer
+{
 public:
-  SGD(double learningRate);
+    SGD(double learningRate);
 
-  void Step() override;
-  void ZeroGrad() override;
+    void Step() override;
 };
 
 /**
@@ -91,36 +100,35 @@ public:
  * W_t = W_{t-1} - \eta \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon}
  * \f]
  */
-class Adam : public Optimizer {
+class Adam : public Optimizer
+{
 private:
-  double m_beta1;   ///< Exponential decay rate for the 1st moment estimates
-  double m_beta2;   ///< Exponential decay rate for the 2nd moment estimates
-  double m_epsilon; ///< Small constant for numerical stability
-  int m_t;          ///< Time step index
+    double m_beta1;   ///< Exponential decay rate for the 1st moment estimates
+    double m_beta2;   ///< Exponential decay rate for the 2nd moment estimates
+    double m_epsilon; ///< Small constant for numerical stability
+    int m_t;          ///< Time step index
 
-  std::vector<Tensor> m_m; ///< 1st moment vectors
-  std::vector<Tensor> m_v; ///< 2nd moment vectors
-  bool m_initialized;      ///< Initialization status flag
+    std::vector<Tensor> m_m; ///< 1st moment vectors
+    std::vector<Tensor> m_v; ///< 2nd moment vectors
+    bool m_initialized;      ///< Initialization status flag
 
-  /**
-   * @brief Initializes first and second moment tensors for registered
-   * parameters.
-   */
-  void InitializeMoments();
+    /**
+     * @brief Initializes first and second moment tensors for registered
+     * parameters.
+     */
+    void InitializeMoments();
 
 public:
-  /**
-   * @brief Construct a new Adam object.
-   * @param learningRate The learning rate.
-   * @param beta1 Decay rate for first moment.
-   * @param beta2 Decay rate for second moment.
-   * @param epsilon Numerical stability constant.
-   */
-  Adam(double learningRate = 0.001, double beta1 = 0.9, double beta2 = 0.999,
-       double epsilon = 1e-8);
+    /**
+     * @brief Construct a new Adam object.
+     * @param learningRate The learning rate.
+     * @param beta1 Decay rate for first moment.
+     * @param beta2 Decay rate for second moment.
+     * @param epsilon Numerical stability constant.
+     */
+    Adam(double learningRate = 0.001, double beta1 = 0.9, double beta2 = 0.999, double epsilon = 1e-8);
 
-  void Step() override;
-  void ZeroGrad() override;
+    void Step() override;
 };
 
 } // namespace optimizer

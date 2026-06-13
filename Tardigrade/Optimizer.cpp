@@ -6,6 +6,18 @@ using namespace tardigrade;
 using namespace tardigrade::optimizer;
 
 // ------------------------------------------------------------
+// Base Optimizer Implementation
+// ------------------------------------------------------------
+void Optimizer::ZeroGrad()
+{
+    for (auto& paramPair : m_parameters)
+    {
+        Tensor* grad = paramPair.second;
+        grad->asVector().setZero();
+    }
+}
+
+// ------------------------------------------------------------
 // SGD Implementation
 // ------------------------------------------------------------
 SGD::SGD(double learningRate) : Optimizer(learningRate) {}
@@ -29,21 +41,6 @@ void SGD::Step()
     }
 }
 
-/**
- * @brief Resets the gradients of all registered parameters to zero.
- */
-void SGD::ZeroGrad() 
-{
-    for (auto& paramPair : m_parameters) 
-    {
-        Tensor* grad = paramPair.second;
-        const size_t size = grad->size();
-        for (size_t i = 0; i < size; ++i) 
-        {
-            (*grad)[i] = 0.0;
-        }
-    }
-}
 
 // ------------------------------------------------------------
 // Adam Implementation
@@ -108,21 +105,6 @@ void Adam::Step()
                 
             // Update parameters: W_t = W_{t-1} - lr * m_hat / (sqrt(v_hat) + epsilon)
             (*weight)[j] -= m_learningRate * m_hat / (std::sqrt(v_hat) + m_epsilon);
-        }
-    }
-}
-/**
- * @brief Resets the gradients of all registered parameters to zero.
- */
-void Adam::ZeroGrad() 
-{
-    for (auto& paramPair : m_parameters) 
-    {
-        Tensor* grad = paramPair.second;
-        const size_t size = grad->size();
-        for (size_t i = 0; i < size; ++i) 
-        {
-            (*grad)[i] = 0.0;
         }
     }
 }

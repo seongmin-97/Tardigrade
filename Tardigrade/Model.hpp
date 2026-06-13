@@ -1,4 +1,5 @@
 #pragma once
+#include <utility>
 #include <vector>
 #include <memory>
 #include <algorithm>
@@ -34,7 +35,7 @@ namespace tardigrade::model
 
         void Backward(const Tensor& gradOutput);
 
-        double TrainStep(const Tensor& input, const Tensor& target, Tensor& predicted);
+        std::pair<double, Tensor> TrainStep(const Tensor& input, const Tensor& target);
 
         Tensor Predict(const Tensor& input);
 
