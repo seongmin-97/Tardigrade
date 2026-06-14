@@ -22,6 +22,11 @@ void Model::SetLossFunction(std::unique_ptr<loss::Loss> lossFunc)
     m_lossFunction = std::move(lossFunc);
 }
 
+void Model::SetMetric(std::unique_ptr<metric::Metric> metric)
+{
+    m_metric = std::move(metric);
+}
+
 // ------------------------------------------------------------
 // InitWeights: Initialize weights for all layers and register parameters
 // ------------------------------------------------------------
@@ -82,7 +87,7 @@ void Model::Backward(const Tensor& gradOutput)
 // 5. Backward     - Backpropagates loss gradient
 // 6. Step         - Updates parameters using the optimizer
 // ------------------------------------------------------------
-std::pair<double, Tensor> Model::TrainStep(const Tensor& input, const Tensor& target)
+std::pair<double, double> Model::TrainStep(const Tensor& input, const Tensor& target)
 {
     if (!m_optimizer || !m_lossFunction)
     {
@@ -98,14 +103,21 @@ std::pair<double, Tensor> Model::TrainStep(const Tensor& input, const Tensor& ta
     // 3. Loss computation
     double lossValue = m_lossFunction->Forward(logits, target);
 
-    // 4. Backward pass
+    // 4. Metric computation
+    double metricValue = 0.0;
+    if (m_metric)
+    {
+        metricValue = m_metric->Evaluate(logits, target);
+    }
+
+    // 5. Backward pass
     Tensor grad = m_lossFunction->Backward();
     Backward(grad);
 
-    // 5. Parameter update
+    // 6. Parameter update
     m_optimizer->Step();
 
-    return { lossValue, logits };
+    return { lossValue, metricValue };
 }
 
 Tensor Model::Predict(const Tensor& input)
@@ -126,4 +138,9 @@ optimizer::Optimizer* Model::GetOptimizer() const
 loss::Loss* Model::GetLossFunction() const
 {
     return m_lossFunction.get();
+}
+
+metric::Metric* Model::GetMetric() const
+{
+    return m_metric.get();
 }

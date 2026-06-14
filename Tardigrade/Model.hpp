@@ -9,6 +9,7 @@
 #include "Layer.hpp"
 #include "Optimizer.hpp"
 #include "Loss.hpp"
+#include "Metric.hpp"
 
 namespace tardigrade::model
 {
@@ -29,13 +30,15 @@ namespace tardigrade::model
 
         void SetLossFunction(std::unique_ptr<loss::Loss> lossFunc);
 
+        void SetMetric(std::unique_ptr<metric::Metric> metric);
+
         void InitWeights();
 
         Tensor Forward(const Tensor& input);
 
         void Backward(const Tensor& gradOutput);
 
-        std::pair<double, Tensor> TrainStep(const Tensor& input, const Tensor& target);
+        std::pair<double, double> TrainStep(const Tensor& input, const Tensor& target);
 
         Tensor Predict(const Tensor& input);
 
@@ -43,10 +46,12 @@ namespace tardigrade::model
         const std::vector<std::unique_ptr<layer::Layer>>& GetLayers() const;
         optimizer::Optimizer* GetOptimizer() const;
         loss::Loss* GetLossFunction() const;
+        metric::Metric* GetMetric() const;
 
     private:
         std::vector<std::unique_ptr<layer::Layer>> m_layers;
         std::unique_ptr<optimizer::Optimizer> m_optimizer;
         std::unique_ptr<loss::Loss> m_lossFunction;
+        std::unique_ptr<metric::Metric> m_metric;
     };
 }
