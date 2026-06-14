@@ -9,12 +9,13 @@ Tardigrade is a lightweight, educational Deep Learning and 3D Vision framework w
 - **Zero-Dependency Core Math**: Built entirely on top of `Eigen 3` for robust and high-performance linear algebra and `OpenCV` for dataset loading and image processing.
 - **Clear Mathematical Foundations**: Equations for Forward Propagation, Backpropagation, and Optimizers are heavily documented directly in the codebase using LaTeX/ASCII syntax.
 - **Modular Architecture**: 
-  - `Tensor`: Zero-copy memory mapped arrays (`Eigen::Map`).
-  - `Model`: Sequential network orchestrator.
-  - `Layer`: Abstract layer designs (e.g., `Dense` with He Initialization).
-  - `Activation`: Nonlinearities (`ReLU`, `Softmax`).
-  - `Loss`: Objective functions (`MSE`, `SoftmaxCrossEntropy`).
-  - `Optimizer`: Parameter update algorithms (`SGD`, `Adam`).
+  - `Tensor`: Zero-copy memory mapped arrays (`Eigen::Map`) with Row-Major matrix bindings.
+  - `Model`: Sequential network orchestrator supporting dynamic batch sizing.
+  - `Layer`: Abstract layer designs (e.g., `Dense` with He Initialization) with automatic remainder batch adjustment.
+  - `Activation`: Nonlinearities (`ReLU`, `Softmax`) running column-wise over mini-batches.
+  - `Loss`: Objective functions (`MSE`, `SoftmaxCrossEntropy`) with mean batch loss scaling.
+  - `Optimizer`: Parameter update algorithms (`SGD`, `Adam`) with optimized zero-gradients initialization via Eigen.
+  - `Metric`: Evaluation indicators (e.g., `Accuracy`) to compute performance metrics on the fly.
   - `DataLoader`: High-performance batched dataset loading.
 - **Doxygen Commented**: All headers are fully documented in English Doxygen format.
 - **API Reference**: Extensive markdown documentation available in the `API_References/` directory.
@@ -41,6 +42,7 @@ Full architectural concepts and individual API component references can be found
 - [Activation API](API_References/activation.md)
 - [Loss API](API_References/loss.md)
 - [Optimizer API](API_References/optimizer.md)
+- [Metric API](API_References/metric.md)
 - [DataLoader API](API_References/dataloader.md)
 - [Model API](API_References/model.md)
 

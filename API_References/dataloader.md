@@ -12,8 +12,8 @@ Defines how data is loaded into memory.
 
 ### `MatSize`
 A simple struct holding target dimensions for resizing images.
-- `int rows;`
-- `int cols;`
+- `int row;`
+- `int col;`
 
 ---
 
@@ -23,29 +23,59 @@ A simple struct holding target dimensions for resizing images.
 Handles reading images from directories, normalizing pixel values, and generating minibatches for training.
 
 #### Constructor
-- `DataLoader(LoadStrategy strategy)`: Initializes the loader with the given strategy.
+- `DataLoader(LoadStrategy strategy = LoadStrategy::EAGER)`: Initializes the loader with the given strategy.
 
 #### Methods
-- `void LoadImageDataset(const std::string& rootDir, MatSize targetSize, int imreadFlag)`: 
-  Iterates through subdirectories in `rootDir` (treating directory names as labels). Reads images using `cv::imread`, resizes them to `targetSize`, flattens them, and normalizes pixel values to the $[0, 1]$ range.
+- `void LoadImageDataset(const std::string& rootDir, MatSize target = {0, 0}, int flag = cv::IMREAD_GRAYSCALE)`: 
+  Iterates through subdirectories in `rootDir` (treating directory names as labels). Reads images using `cv::imread`, resizes them to `target`, flattens them, and normalizes pixel values to the $[0, 1]$ range.
   $$ X_{\text{norm}} = \frac{X_{\text{raw}}}{255.0} $$
-
-- `std::pair<Tensor, Tensor> GetBatch(int batchSize)`: 
-  Returns a random minibatch of images and their corresponding one-hot encoded labels.
-  - Returns a tuple `(ImagesTensor, LabelsTensor)`
-  - Images Tensor Shape: `{batchSize, Rows * Cols}`
-  - Labels Tensor Shape: `{batchSize, NumClasses}`
 
 - `size_t GetDataSize() const`: Returns the total number of samples loaded.
 
+- `Tensor GetData(size_t index) const`: Retrieves a single normalized image tensor of shape `(totalPixels, 1)`.
+
+- `int GetLabel(size_t index) const`: Retrieves a single integer label.
+
+- `Tensor GetBatch(size_t startIdx, size_t batchSize) const`: 
+  Retrieves a batch of image tensors stacked column-wise.
+  - Returns a Tensor of shape `(featureSize, actualBatchSize)`.
+
+- `std::vector<int> GetLabelBatch(size_t startIdx, size_t batchSize) const`: 
+  Retrieves a batch of ground-truth integer labels as a vector of size `actualBatchSize`.
+
+- `void Shuffle(std::mt19937 &rng)`: Shuffles the indices of the dataset in-place using the provided random engine.
+
 ## Usage Example
 ```cpp
+#include <iostream>
+#include <random>
 #include "DataLoader.hpp"
+
+using namespace tardigrade;
 using namespace tardigrade::data;
 
-DataLoader loader(LoadStrategy::EAGER);
-loader.LoadImageDataset("/path/to/MNIST/train", {28, 28}, cv::IMREAD_GRAYSCALE);
+int main()
+{
+    std::random_device rd;
+    std::mt19937 rng(rd());
 
-// Get a batch of 32 images
-auto [images, labels] = loader.GetBatch(32);
+    DataLoader loader(LoadStrategy::EAGER);
+    loader.LoadImageDataset("/path/to/MNIST/train", {28, 28}, cv::IMREAD_GRAYSCALE);
+
+    // Shuffle each epoch
+    loader.Shuffle(rng);
+
+    constexpr size_t batchSize = 16;
+    for (size_t i = 0; i < loader.GetDataSize(); i += batchSize)
+    {
+        size_t currentBatchSize = std::min(batchSize, loader.GetDataSize() - i);
+        
+        Tensor batchImages = loader.GetBatch(i, currentBatchSize);
+        std::vector<int> batchLabels = loader.GetLabelBatch(i, currentBatchSize);
+
+        // ... process batch ...
+    }
+
+    return 0;
+}
 ```

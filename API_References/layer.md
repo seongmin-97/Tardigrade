@@ -10,10 +10,13 @@ Defines the contract for all neural network layers.
 
 #### Pure Virtual Methods
 - `virtual Tensor Forward(const Tensor& input) = 0;`: Computes the forward pass.
-- `virtual Tensor Backward(const Tensor& gradOutput) = 0;`: Computes the backward pass and calculates weight gradients.
-- `virtual Tensor& GetWeights() = 0;`: Returns a reference to the layer's parameters.
-- `virtual Tensor& GetGradients() = 0;`: Returns a reference to the parameter gradients.
-- `virtual void SetActivation(std::unique_ptr<activation::Activation> activation) = 0;`: Sets the activation function for the layer.
+- `virtual Tensor Backward(const Tensor& gradOutput) = 0;`: Computes the backward pass and calculates parameter gradients.
+
+#### Virtual Methods (with default no-op implementations)
+- `virtual std::vector<std::pair<Tensor*, Tensor*>> GetParameters()`: Returns a vector of pairs, each containing pointers to (weight, gradient) tensors for optimization.
+- `virtual void SetInputSize(int inputSize)`: Set the input feature size of the layer.
+- `virtual void SetOutputSize(int outputSize)`: Set the output feature size of the layer.
+- `virtual void SetBatchSize(int batchSize)`: Sets the batch size for calculations, triggering internal shape reallocations or reshaping.
 
 ---
 
@@ -22,25 +25,23 @@ Defines the contract for all neural network layers.
 ### `Dense`
 A fully connected (Dense) layer implementation. To optimize computation, the `Dense` layer uses the **Augmented Input Strategy**, where the bias term is folded directly into the weight matrix.
 
-#### Mathematical Foundation
-Instead of maintaining separate Weights ($W$) and Bias ($b$):
-$$ Z = XW + b $$
-
-The augmented strategy prepends a `1.0` to every input vector $X$:
-$$ X' = [1, X_1, X_2, \dots, X_N] $$
-$$ W' = \begin{bmatrix} b \\ W \end{bmatrix} $$
-Resulting in a single matrix multiplication:
-$$ Z = X' W' $$
+#### Constructor
+- `Dense(int inputSize, int outputSize, int batchSize = 1, ACTIVATION activation = ACTIVATION::NONE)`
+  - `inputSize`: Feature dimension of incoming data (excluding bias).
+  - `outputSize`: Feature dimension of outgoing data.
+  - `batchSize`: Expected mini-batch size (defaults to 1).
+  - `activation`: An enum `ACTIVATION` value specifying the layer's activation function.
 
 #### Initialization
 Weights are initialized using **He Initialization**, suitable for layers followed by ReLU:
 $$ W_{ij} \sim \mathcal{N}\left(0, \frac{2}{\text{fan\_in}}\right) $$
-*(Bias is initialized to 0.01)*
+*(Bias is initialized to 0.0)*
 
 #### Forward Pass
-1. Augments input `X` to `X'`.
-2. Computes Matrix Multiplication $Z = X' W'$.
-3. If an activation function is set, returns $\sigma(Z)$, otherwise returns $Z$.
+1. Compares the input batch size (number of columns) with `m_batchSize`. If there is a mismatch (e.g. remainder batch at the end of an epoch), it dynamically invokes `SetBatchSize(cols)` to reallocate buffers safely.
+2. Augments input `X` to `X'`.
+3. Computes Matrix Multiplication $Z = X' W'$.
+4. If an activation function is set, returns $\sigma(Z)$, otherwise returns $Z$.
 
 #### Backward Pass
 1. Computes the gradient w.r.t Activation: $\delta = \text{gradOutput} \odot \sigma'(Z)$.
@@ -50,18 +51,29 @@ $$ W_{ij} \sim \mathcal{N}\left(0, \frac{2}{\text{fan\_in}}\right) $$
 
 ## Usage Example
 ```cpp
+#include <iostream>
+#include <memory>
 #include "Layer.hpp"
 #include "Activation.hpp"
+
+using namespace tardigrade;
 using namespace tardigrade::layer;
 using namespace tardigrade::activation;
 
-// Create a Dense layer: Input=784, Output=256
-Dense layer1(784, 256);
+int main()
+{
+    constexpr int inputSize = 784;
+    constexpr int outputSize = 256;
+    constexpr int batchSize = 16;
 
-// Set ReLU activation
-layer1.SetActivation(std::make_unique<ReLU>());
+    // Create a Dense layer with ReLU activation and batch size 16
+    Dense layer1(inputSize, outputSize, batchSize, ACTIVATION::ReLU);
+    layer1.InitWeight();
 
-// Forward Pass
-Tensor input({1, 784});
-Tensor output = layer1.Forward(input);
+    // Forward Pass with matching batch size
+    Tensor input({inputSize, batchSize});
+    Tensor output = layer1.Forward(input);
+
+    return 0;
+}
 ```

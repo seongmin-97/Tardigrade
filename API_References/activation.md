@@ -10,7 +10,10 @@ Defines the standard interface for an activation function.
 
 #### Pure Virtual Methods
 - `virtual Tensor Forward(const Tensor& input) = 0;`: Applies the activation function to the input.
-- `virtual Tensor Backward(const Tensor& gradOutput, const Tensor& input) = 0;`: Computes the gradient of the loss with respect to the input of the activation.
+- `virtual Tensor Backward(const Tensor& gradOutput) = 0;`: Computes the gradient of the loss with respect to the input of the activation using the cached forward states.
+
+#### Virtual Methods
+- `virtual void SetBatchSize(int batchSize);`: Dynamically updates the batch size, resizing intermediate cached tensors (`m_inputVector`, `m_outputVector`, `m_gradient`).
 
 ---
 
@@ -36,23 +39,47 @@ The standard activation function for deep neural networks.
 ---
 
 ### `Softmax`
-Used primarily in the output layer for multi-class classification to yield a probability distribution.
+Used primarily in the output layer for multi-class classification to yield a probability distribution. The implementation performs numerically stable softmax per sample column in the batch.
 
 #### Mathematical Foundation
-To prevent numerical overflow, the implementation subtracts the maximum value in the input vector ($C = \max(x_i)$):
-$$ \sigma(x)_i = \frac{e^{x_i - C}}{\sum_j e^{x_j - C}} $$
+To prevent numerical overflow, the implementation subtracts the maximum value in each sample column ($C_i = \max_j(Z_{j, i})$):
 
-> **Note on Softmax Backward**: 
-> In Tardigrade, when Softmax is combined with Cross-Entropy Loss, computing their independent gradients is computationally inefficient and numerically unstable. Therefore, `Softmax::Backward` acts as a pass-through in this implementation, and the true combined gradient $P - Y$ is computed inside `SoftmaxCrossEntropy::Backward`.
+- **Forward Pass**:
+  $$ \sigma(Z)_{k, i} = \frac{e^{Z_{k, i} - C_i}}{\sum_j e^{Z_{j, i} - C_i}} $$
+  Where $k$ is the class/feature index and $i$ is the batch index.
+
+- **Backward Pass**:
+  Computes the backward pass using the Softmax Jacobian matrix for each sample column:
+  $$ \frac{\partial L}{\partial Z_{k, i}} = \sigma_{k, i} \left( \frac{\partial L}{\partial \sigma_{k, i}} - \sum_j \frac{\partial L}{\partial \sigma_{j, i}} \sigma_{j, i} \right) $$
+
+> **Note on Softmax Backward with Loss**: 
+> While `Softmax::Backward` implements the general Jacobian multiplication, in practice when Softmax is combined with Cross-Entropy Loss, computing independent gradients is inefficient and numerically unstable. Therefore, Tardigrade provides a dedicated `SoftmaxCrossEntropy` loss layer that computes the combined gradient $P - Y$ directly, bypassing this individual activation backward step during training.
 
 ## Usage Example
 ```cpp
+#include <iostream>
 #include "Activation.hpp"
+
+using namespace tardigrade;
 using namespace tardigrade::activation;
 
-ReLU relu;
-Tensor input({1, 5}); 
-// input = [-2, -1, 0, 1, 2]
-Tensor activated = relu.Forward(input); 
-// activated = [0, 0, 0, 1, 2]
+int main()
+{
+    constexpr int featureSize = 5;
+    constexpr int batchSize = 1;
+    
+    ReLU relu(featureSize, batchSize);
+    Tensor input({featureSize, batchSize}); 
+    
+    input[0] = -2.0;
+    input[1] = -1.0;
+    input[2] = 0.0;
+    input[3] = 1.0;
+    input[4] = 2.0;
+
+    Tensor activated = relu.Forward(input); 
+    // activated will be [0.0, 0.0, 0.0, 1.0, 2.0]
+    
+    return 0;
+}
 ```

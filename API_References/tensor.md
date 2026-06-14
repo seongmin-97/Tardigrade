@@ -16,11 +16,16 @@ $$ \text{Size} = \prod_{i=0}^{N-1} \text{shape}[i] $$
 - `Tensor() = default;`: Creates an empty tensor.
 
 #### Memory Mapping (Zero-Copy)
-- `MatrixMap asMatrix(int rows, int cols)` / `ConstMatrixMap asMatrix(int rows, int cols) const`: Returns an `Eigen::Map<Eigen::MatrixXd>` representation.
+- `MatrixMap asMatrix(int rows, int cols)` / `ConstMatrixMap asMatrix(int rows, int cols) const`: Returns an `Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>` representation. By utilizing Row-Major mapping, it matches C++'s contiguous memory layout seamlessly.
 - `VectorMap asVector()` / `ConstVectorMap asVector() const`: Returns an `Eigen::Map<Eigen::VectorXd>`.
 
+#### Element Access
+- `double& operator[](size_t index)` / `const double& operator[](size_t index) const`: Direct access to the flat 1D contiguous vector by index.
+- `template<typename... Args> double& operator()(Args... indices)`: Returns a mutable reference to the element at multi-dimensional indices calculated via strides.
+- `template<typename... Args> double operator()(Args... indices) const`: Returns the value of the element at multi-dimensional indices (const version).
+
 #### Shape Operations
-- `void reshape(const std::vector<int>& newShape)`: Changes the tensor shape in-place without reallocation.
+- `void reshape(const std::vector<int>& newShape)`: Changes the tensor shape in-place. If the size of the `newShape` differs from the current element count, the underlying `std::vector` is automatically resized and padded with `0.0`.
 - `Tensor transpose() const`: Returns a new tensor matching $(A^T)_{ij} = A_{ji}$ for 2D tensors.
 
 #### Mathematical Operations

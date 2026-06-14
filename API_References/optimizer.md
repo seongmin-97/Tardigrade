@@ -12,8 +12,8 @@ Defines the standard interface for an optimization algorithm.
 - `virtual void Step() = 0;`: Executes a single parameter update step.
 
 #### Member Management
-- `void AddParameters(layer::Layer* layer)`: Registers a layer's weights and gradients with the optimizer.
-- `void ZeroGrad()`: Clears the gradients in all registered layers before the next backward pass.
+- `void AddParameters(const std::vector<std::pair<Tensor*, Tensor*>>& params)`: Registers a vector of parameter-gradient pairs with the optimizer. (Typically retrieved from layers via `layer.GetParameters()`).
+- `virtual void ZeroGrad()`: Resets the gradients of all registered parameters to zero. The implementation leverages Eigen's `.setZero()` vectorized method for optimal memory zero-out performance.
 
 ---
 
@@ -54,18 +54,32 @@ Maintains a moving average of both the gradients (first moment $m$) and the squa
 
 ## Usage Example
 ```cpp
+#include <iostream>
 #include "Optimizer.hpp"
 #include "Layer.hpp"
+
+using namespace tardigrade;
 using namespace tardigrade::optimizer;
 using namespace tardigrade::layer;
 
-Adam optimizer(0.001); // Learning rate 0.001
+int main()
+{
+    constexpr double lr = 0.001;
+    constexpr int batchSize = 16;
+    
+    Adam optimizer(lr); 
 
-Dense layer1(784, 256);
-optimizer.AddParameters(&layer1);
+    Dense layer1(784, 256, batchSize, ACTIVATION::ReLU);
+    layer1.InitWeight();
+    
+    // Register the layer parameters to the optimizer
+    optimizer.AddParameters(layer1.GetParameters());
 
-// ... inside training loop ...
-optimizer.ZeroGrad();
-// Compute Forward and Backward passes
-optimizer.Step();
+    // ... inside training loop ...
+    optimizer.ZeroGrad();
+    // (Compute Forward and Backward passes)
+    optimizer.Step();
+
+    return 0;
+}
 ```
