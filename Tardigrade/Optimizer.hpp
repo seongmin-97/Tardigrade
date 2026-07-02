@@ -1,7 +1,8 @@
 #pragma once
-#include <utility>
+#include <iostream>
 #include <vector>
 
+#include "Autograd.hpp"
 #include "Tensor.hpp"
 
 namespace tardigrade
@@ -9,21 +10,15 @@ namespace tardigrade
 namespace optimizer
 {
 /**
- * @brief Pair of pointers pointing to a weight tensor and its corresponding
- * gradient tensor.
- */
-using ParamGradPair = std::pair<Tensor *, Tensor *>;
-
-/**
  * @brief Abstract base class for optimizers.
  *
- * Manages network parameter updates using their computed gradients.
+ * Manages network parameter updates using their computed gradients via Autograd.
  */
 class Optimizer
 {
 protected:
-    std::vector<ParamGradPair> m_parameters; ///< Registered parameters (weight, gradient) pairs
-    double m_learningRate;                   ///< Learning rate
+    std::vector<Tensor> m_parameters; ///< Registered weight parameter Tensors
+    double m_learningRate;            ///< Learning rate
 
 public:
     /**
@@ -34,15 +29,17 @@ public:
     virtual ~Optimizer() = default;
 
     /**
-     * @brief Registers parameter and gradient tensor pairs to the optimizer.
-     * @param params Vector of ParamGradPair pointers.
+     * @brief Registers parameter Tensors to the optimizer.
+     * @param params Vector of parameter Tensors.
      */
-    void AddParameters(const std::vector<ParamGradPair> &params)
+    void AddParameters(const std::vector<Tensor> &params)
     {
-        for (const auto &pair : params)
+        for (const auto &p : params)
         {
-            if (pair.first->shape() != pair.second->shape())
-                throw std::runtime_error("Parameter and gradient shape mismatch.");
+            if (!p.requiresGrad())
+            {
+                std::cerr << "[WARN] Tensor without requiresGrad=true registered to optimizer.\n";
+            }
         }
         m_parameters.insert(m_parameters.end(), params.begin(), params.end());
     }
@@ -54,23 +51,12 @@ public:
 
     /**
      * @brief Resets the gradients of all registered parameters to zero.
-     * @note
-     * Mathematical formula:
-     * \f[
-     * \nabla L(W) \leftarrow \mathbf{0}
-     * \f]
      */
     virtual void ZeroGrad();
 };
 
 /**
  * @brief Stochastic Gradient Descent (SGD) optimizer.
- * @note
- * Mathematical formula:
- * \f[
- * W_t = W_{t-1} - \eta \nabla L(W_{t-1})
- * \f]
- * where \f$ \eta \f$ is the learning rate and \f$ \nabla L \f$ is the gradient.
  */
 class SGD : public Optimizer
 {
@@ -82,23 +68,6 @@ public:
 
 /**
  * @brief Adaptive Moment Estimation (Adam) optimizer.
- * @note
- * Mathematical formulas:
- * \f[
- * m_t = \beta_1 m_{t-1} + (1 - \beta_1) g_t
- * \f]
- * \f[
- * v_t = \beta_2 v_{t-1} + (1 - \beta_2) g_t^2
- * \f]
- * \f[
- * \hat{m}_t = \frac{m_t}{1 - \beta_1^t}
- * \f]
- * \f[
- * \hat{v}_t = \frac{v_t}{1 - \beta_2^t}
- * \f]
- * \f[
- * W_t = W_{t-1} - \eta \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon}
- * \f]
  */
 class Adam : public Optimizer
 {
@@ -113,23 +82,14 @@ private:
     bool m_initialized;      ///< Initialization status flag
 
     /**
-     * @brief Initializes first and second moment tensors for registered
-     * parameters.
+     * @brief Initializes first and second moment tensors for registered parameters.
      */
     void InitializeMoments();
 
 public:
-    /**
-     * @brief Construct a new Adam object.
-     * @param learningRate The learning rate.
-     * @param beta1 Decay rate for first moment.
-     * @param beta2 Decay rate for second moment.
-     * @param epsilon Numerical stability constant.
-     */
     Adam(double learningRate = 0.001, double beta1 = 0.9, double beta2 = 0.999, double epsilon = 1e-8);
 
     void Step() override;
 };
-
 } // namespace optimizer
 } // namespace tardigrade

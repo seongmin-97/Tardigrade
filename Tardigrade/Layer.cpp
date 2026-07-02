@@ -1,167 +1,106 @@
 #include "Layer.hpp"
-#include "Activation.hpp"
 
-using namespace tardigrade;
-using namespace tardigrade::layer;
-using namespace tardigrade::activation;
-
-Dense::Dense(int inputSize, int outputSize, int batchSize, ACTIVATION activation)
+namespace tardigrade::layer
 {
-    m_batchSize = batchSize;
-	
-    m_inputSize = inputSize + 1; // Always use bias (augmented input: input + bias)
-    m_outputSize = outputSize;
-
-    m_weight = Tensor({ m_inputSize, m_outputSize });
-    m_gradient = Tensor({ m_inputSize, m_outputSize });
-
-    m_inputMat = Tensor({ m_inputSize, m_batchSize });
-    m_outputMat = Tensor({ m_outputSize, m_batchSize });
-
-    m_enumAct = activation;
-
-    switch (m_enumAct)
+    Dense::Dense(int inputSize, int outputSize, int batchSize, activation::ACTIVATION activation)
     {
-    case ACTIVATION::NONE :
-        m_activation = std::make_unique<None>(m_outputSize, m_batchSize);
-        break;
-    case ACTIVATION::ReLU :
-        m_activation = std::make_unique<ReLU>(m_outputSize, m_batchSize);
-        break;
-    case ACTIVATION::Softmax :
-        m_activation = std::make_unique<Softmax>(m_outputSize, m_batchSize);
-        break;
-    }
-}
+        m_inputSize = inputSize + 1; // augmented input size including bias
+        m_outputSize = outputSize;
+        m_batchSize = batchSize;
+        m_enumAct = activation;
 
-Tensor Dense::Forward(const Tensor& input)
-{
-    int rows = input.dim(0);
-    int cols = (input.rank() == 1) ? 1 : input.dim(1);
-
-    if (rows != m_inputSize - 1)
-    {
-        throw std::runtime_error("Input dimension mismatch in Dense::Forward. Expected " + std::to_string(m_inputSize - 1) + " but got " + std::to_string(rows));
+        // Weights require gradients
+        m_weight = Tensor({m_inputSize, m_outputSize}, true);
+        InitWeight();
     }
 
-    if (cols != m_batchSize)
+    Tensor Dense::Forward(const Tensor& input)
     {
-        SetBatchSize(cols);
+        int rows = input.dim(0);
+        int cols = (input.rank() == 1) ? 1 : input.dim(1);
+
+        if (rows != m_inputSize - 1)
+        {
+            throw std::runtime_error("Input dimension mismatch in autograd Dense::Forward.");
+        }
+
+        if (cols != m_batchSize)
+        {
+            SetBatchSize(cols);
+        }
+
+        // Split m_weight into feature weights (bottom rows) and bias weights (top row)
+        // feature_W: shape (m_inputSize - 1, m_outputSize)
+        // bias_W: shape (1, m_outputSize)
+        Tensor feature_W = slice(m_weight, 1, m_inputSize);
+        Tensor bias_W = slice(m_weight, 0, 1);
+
+        // Linear activation calculation: Y_feature = W_feature^T * X
+        Tensor Y_feature = matmul(transpose(feature_W), input);
+
+        // Broadcast bias vector by multiplying bias_W^T with a constant row of ones.
+        // ones: shape (1, m_batchSize) initialized to 1.0
+        Tensor ones({1, m_batchSize}, false);
+        std::fill(ones.data(), ones.data() + ones.size(), 1.0);
+
+        Tensor Y_bias = matmul(transpose(bias_W), ones);
+
+        // Add feature and bias predictions: Y = Y_feature + Y_bias
+        Tensor logits = add(Y_feature, Y_bias);
+
+        // Apply activation functions using pure autograd ops
+        Tensor output;
+        if (m_enumAct == activation::ACTIVATION::ReLU)
+        {
+            output = relu(logits);
+        }
+        else if (m_enumAct == activation::ACTIVATION::Softmax)
+        {
+            output = softmax(logits);
+        }
+        else
+        {
+            output = logits;
+        }
+
+        return output;
     }
 
-    m_inputMat.row(0).setConstant(1.0); // Set bias row to constant 1.0
-    m_inputMat.asMatrix(m_inputSize, m_batchSize).bottomRows(rows) = input.asMatrix(rows, cols);
-
-    m_outputMat = m_activation->Forward(m_weight.transpose() * m_inputMat);
-
-	return m_outputMat;
-}
-
-Tensor Dense::Backward(const Tensor& input)
-{
-    Tensor dZ = m_activation->Backward(input);
-
-    m_gradient = m_inputMat * dZ.transpose();
-
-    Tensor dX_aug = m_weight * dZ;
-
-    Tensor result({ m_inputSize - 1, m_batchSize });
-    int rows = m_inputSize - 1;
-    result.asMatrix(rows, m_batchSize) = dX_aug.asMatrix(m_inputSize, m_batchSize).bottomRows(rows);
-    
-    return result;
-}
-
-void Dense::SetInputSize(int inputSize)
-{
-    if (inputSize + 1 == m_inputSize)
-        return;
-
-    m_inputSize = inputSize + 1; // Always use bias
-
-    m_weight.reshape({ m_inputSize, m_outputSize });
-    m_gradient.reshape({ m_inputSize, m_outputSize });
-    m_inputMat.reshape({ m_inputSize, m_batchSize });
-
-    InitWeight();
-}
-
-void Dense::SetOutputSize(int outputSize)
-{
-    if (outputSize == m_outputSize)
-        return;
-
-    m_outputSize = outputSize;
-
-    m_weight.reshape({ m_inputSize, m_outputSize });
-    m_gradient.reshape({ m_inputSize, m_outputSize });
-    m_outputMat.reshape({ m_outputSize, m_batchSize });
-
-    InitWeight();
-}
-
-void Dense::SetBatchSize(int batchSize)
-{
-    if (batchSize == m_batchSize)
+    std::vector<Tensor> Dense::GetParameters()
     {
-        return;
+        return { m_weight };
     }
 
-    m_batchSize = batchSize;
-
-    m_inputMat.reshape({ m_inputSize, m_batchSize });
-    m_outputMat.reshape({ m_outputSize, m_batchSize });
-
-    if (m_activation)
+    void Dense::SetBatchSize(int batchSize)
     {
-        m_activation->SetBatchSize(batchSize);
+        if (m_batchSize == batchSize)
+        {
+            return;
+        }
+        m_batchSize = batchSize;
     }
-}
 
-void Dense::SetActivation(ACTIVATION activation)
-{
-    if (m_enumAct == activation)
-        return;
-
-    m_enumAct = activation;
-
-    switch (m_enumAct)
+    void Dense::InitWeight()
     {
-    case ACTIVATION::NONE:
-        m_activation = std::make_unique<None>(m_outputSize, m_batchSize);
-        break;
-    case ACTIVATION::ReLU:
-        m_activation = std::make_unique<ReLU>(m_outputSize, m_batchSize);
-        break;
-    case ACTIVATION::Softmax:
-        m_activation = std::make_unique<activation::Softmax>(m_outputSize, m_batchSize);
-        break;
+        std::random_device rd;
+        std::mt19937 gen(rd());
+
+        // He initialization standard deviation: sqrt(2.0 / fan_in)
+        double stddev = std::sqrt(2.0 / static_cast<double>(m_inputSize - 1));
+        std::normal_distribution<double> dist(0.0, stddev);
+
+        for (int i = 0; i < m_inputSize; ++i)
+        {
+            for (int j = 0; j < m_outputSize; ++j)
+            {
+                m_weight(i, j) = dist(gen);
+            }
+        }
+
+        // Initialize bias row (row 0) to zero
+        for (int j = 0; j < m_outputSize; ++j)
+        {
+            m_weight(0, j) = 0.0;
+        }
     }
-}
-
-void Dense::InitWeight()
-{
-    std::random_device rd;
-    std::mt19937 gen(rd());
-
-    // He initialization standard deviation: sqrt(2.0 / fan_in)
-    // where fan_in is the actual input neurons (excluding bias)
-    double stddev = std::sqrt(2.0 / static_cast<double>(m_inputSize - 1));
-
-    std::normal_distribution<double> dist(0.0, stddev);
-    
-    int row = m_weight.dim(0);
-    int col = m_weight.dim(1);
-
-    for (int i = 0; i < row; ++i)
-        for (int j = 0; j < col; ++j)
-            m_weight(i, j) = dist(gen);
-
-    // Initialize the bias weight vector (multiplied by constant 1.0) to zero
-    m_weight.row(0).setZero();
-}
-
-std::vector<std::pair<Tensor*, Tensor*>> Dense::GetParameters()
-{
-    return { {&m_weight, &m_gradient} };
 }

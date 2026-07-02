@@ -20,6 +20,7 @@ set(SOURCES
     Tardigrade/Model.cpp
     Tardigrade/Optimizer.cpp
     Tardigrade/Metric.cpp
+    Tardigrade/Autograd.cpp
 )
 
 # Header files (optional, but good for IDEs)
@@ -32,6 +33,8 @@ set(HEADERS
     Tardigrade/Tensor.hpp
     Tardigrade/Optimizer.hpp
     Tardigrade/Metric.hpp
+    Tardigrade/Autograd.hpp
+    Tardigrade/AutogradNodes.hpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})

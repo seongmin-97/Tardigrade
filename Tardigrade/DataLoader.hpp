@@ -83,12 +83,12 @@ public:
   Tensor GetBatch(size_t startIdx, size_t batchSize) const;
 
   /**
-   * @brief Retrieve a batch of integer labels.
+   * @brief Retrieve a batch of labels as a Tensor.
    * @param startIdx The starting index of the batch.
    * @param batchSize The size of the batch.
-   * @return Vector of labels.
+   * @return Tensor representing the labels.
    */
-  std::vector<int> GetLabelBatch(size_t startIdx, size_t batchSize) const;
+  Tensor GetLabelBatch(size_t startIdx, size_t batchSize) const;
 
   /**
    * @brief Shuffle the dataset.

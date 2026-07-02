@@ -1,6 +1,5 @@
 #include "Model.hpp"
 
-
 using namespace tardigrade;
 using namespace tardigrade::model;
 
@@ -39,13 +38,8 @@ void Model::InitWeights()
 
     for (auto& layer : m_layers)
     {
-        // If the layer is Dense, initialize weights and register parameters with optimizer
-        auto* dense = dynamic_cast<layer::Dense*>(layer.get());
-        if (dense)
-        {
-            dense->InitWeight();
-            m_optimizer->AddParameters(dense->GetParameters());
-        }
+        layer->InitWeight();
+        m_optimizer->AddParameters(layer->GetParameters());
     }
 }
 
@@ -65,27 +59,19 @@ Tensor Model::Forward(const Tensor& input)
 }
 
 // ------------------------------------------------------------
-// Backward: Propagates gradients backwards through layers in reverse order
+// Backward: Auto-differentiates starting from the Loss Function
 // ------------------------------------------------------------
 void Model::Backward(const Tensor& gradOutput)
 {
-    Tensor current = gradOutput;
-
-    for (auto it = m_layers.rbegin(); it != m_layers.rend(); ++it)
+    // Autograd manages backward graph natively, so we just run loss backward.
+    if (m_lossFunction)
     {
-        current = (*it)->Backward(current);
+        m_lossFunction->Backward();
     }
 }
 
 // ------------------------------------------------------------
 // TrainStep: Performs a single training step
-//
-// 1. ZeroGrad     - Resets gradients of parameters
-// 2. Forward      - Propagates input to logits
-// 3. Loss.Forward - Computes loss value from logits and label
-// 4. Prediction   - Predicts class label
-// 5. Backward     - Backpropagates loss gradient
-// 6. Step         - Updates parameters using the optimizer
 // ------------------------------------------------------------
 std::pair<double, double> Model::TrainStep(const Tensor& input, const Tensor& target)
 {
@@ -107,12 +93,11 @@ std::pair<double, double> Model::TrainStep(const Tensor& input, const Tensor& ta
     double metricValue = 0.0;
     if (m_metric)
     {
-        metricValue = m_metric->Evaluate(logits, target);
+        metricValue = m_metric->Evaluate(m_lossFunction->GetProbs(), target);
     }
 
-    // 5. Backward pass
-    Tensor grad = m_lossFunction->Backward();
-    Backward(grad);
+    // 5. Backward pass via Autograd
+    m_lossFunction->Backward();
 
     // 6. Parameter update
     m_optimizer->Step();

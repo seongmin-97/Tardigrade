@@ -4,6 +4,7 @@
 #include <stdexcept>
 
 #include "Tensor.hpp"
+#include "Autograd.hpp"
 
 namespace tardigrade::loss
 {
@@ -37,37 +38,25 @@ namespace tardigrade::loss
          */
         virtual Tensor Backward() = 0;
 
+        /**
+         * @brief Returns prediction probabilities or predictions.
+         */
+        virtual Tensor GetProbs() const
+        {
+            return m_prediction;
+        }
+
     protected:
         int m_inputSize;       ///< Input feature size (excluding batch dimension)
         int m_batchSize;       ///< Batch size
 
         Tensor m_prediction;   ///< Cached predictions from forward pass
-        Tensor m_gradient;     ///< Cached gradients from backward pass
+        Tensor m_target;       ///< Cached target labels from forward pass
+        Tensor m_lossTensor;   ///< Cached scalar loss Tensor
     };
 
     /**
-     * @brief Softmax Activation coupled with Cross-Entropy Loss.
-     * @note
-     * Combining Softmax and Cross-Entropy makes the gradient calculation mathematically simple and numerically stable.
-     * 
-     * Mathematical formulas:
-     * 
-     * Softmax Forward:
-     * \f[
-     * \sigma(z)_{k, i} = \frac{e^{z_{k, i} - \max_j(z_{j, i})}}{\sum_j e^{z_{j, i} - \max_j(z_{j, i})}}
-     * \f]
-     * where $k$ is the class index and $i$ is the batch index.
-     * 
-     * Cross-Entropy Loss (Mean over batch):
-     * \f[
-     * L = -\frac{1}{N} \sum_{i=1}^N \log(\sigma(z)_{target_i, i} + \epsilon)
-     * \f]
-     * 
-     * Combined Gradient:
-     * \f[
-     * \frac{\partial L}{\partial z_{k, i}} = \frac{1}{N} (\sigma(z)_{k, i} - y_{k, i})
-     * \f]
-     * where \f$ y_{k, i} = 1 \f$ if \f$ k == target_i \f$, else \f$ 0 \f$.
+     * @brief Softmax Activation coupled with Cross-Entropy Loss (Autograd version).
      */
     class SoftmaxCrossEntropy : public Loss
     {
@@ -79,47 +68,19 @@ namespace tardigrade::loss
 
         /**
          * @brief Get cached softmax probabilities (used for class prediction).
-         * @return Reference to the probability tensor.
          */
-        const Tensor& GetProbs() const;
-
-    private:
-        Tensor m_probs;   ///< Cached softmax probabilities
-        Tensor m_target;  ///< Cached target labels from forward pass
+        Tensor GetProbs() const override;
     };
 
     /**
-     * @brief Mean Squared Error (MSE) loss function for regression tasks.
-     * @note
-     * Mathematical formulas:
-     * 
-     * Forward Pass (Mean over batch and features):
-     * \f[
-     * L = \frac{1}{B \cdot C} \sum_{i=1}^B \sum_{j=1}^C (y\_pred_{j, i} - y\_true_{j, i})^2
-     * \f]
-     * where $B$ is the batch size and $C$ is the feature size (inputSize).
-     * 
-     * Backward Pass:
-     * \f[
-     * \frac{\partial L}{\partial y\_pred_{j, i}} = \frac{2}{B \cdot C} (y\_pred_{j, i} - y\_true_{j, i})
-     * \f]
+     * @brief Mean Squared Error (MSE) loss function for regression tasks (Autograd version).
      */
     class MSE : public Loss
     {
     public:
         MSE(int inputSize, int batchSize);
 
-        /**
-         * @brief Forward pass for regression tasks comparing prediction and target tensors.
-         * @param prediction Prediction tensor.
-         * @param target Target tensor.
-         * @return The scalar MSE loss value.
-         */
         double Forward(const Tensor& prediction, const Tensor& target) override;
-
         Tensor Backward() override;
-
-    private:
-        Tensor m_target;  ///< Cached targets from forward pass
     };
 }
