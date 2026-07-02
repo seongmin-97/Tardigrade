@@ -191,7 +191,7 @@ Tensor DataLoader::GetBatch(size_t startIdx, size_t batchSize) const
     return batch;
 }
 
-std::vector<int> DataLoader::GetLabelBatch(size_t startIdx, size_t batchSize) const
+Tensor DataLoader::GetLabelBatch(size_t startIdx, size_t batchSize) const
 {
     if (startIdx >= GetDataSize() || batchSize == 0)
     {
@@ -199,10 +199,14 @@ std::vector<int> DataLoader::GetLabelBatch(size_t startIdx, size_t batchSize) co
     }
 
     size_t actualSize = std::min(batchSize, GetDataSize() - startIdx);
-    return std::vector<int>(
-        m_labels.begin() + static_cast<long>(startIdx),
-        m_labels.begin() + static_cast<long>(startIdx + actualSize)
-    );
+    Tensor batchTarget({ 1, static_cast<int>(actualSize) });
+
+    for (size_t i = 0; i < actualSize; ++i)
+    {
+        batchTarget[i] = static_cast<double>(m_labels[startIdx + i]);
+    }
+
+    return batchTarget;
 }
 
 // ------------------------------------------------------------

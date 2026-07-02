@@ -1,9 +1,10 @@
 #include "Autograd.hpp"
+#include "AutogradNodes.hpp"
 #include <numeric>
 #include <algorithm>
 #include <iostream>
 
-namespace tardigrade::autograd
+namespace tardigrade
 {
     // Helper to topologically sort the computation graph
     void buildTopo(const std::shared_ptr<Node>& node, std::vector<std::shared_ptr<Node>>& sorted, std::unordered_set<std::shared_ptr<Node>>& visited)
@@ -224,7 +225,7 @@ namespace tardigrade::autograd
                     }
                     else
                     {
-                        input.asVector() += gradInputs[i].asVector();
+                        Tensor(input.m_impl->m_grad).asVector() += gradInputs[i].asVector();
                     }
                 }
             }
@@ -266,116 +267,126 @@ namespace tardigrade::autograd
      *   dA = dY * B^T
      *   dB = A^T * dY
      */
-    class MatMulNode : public Node
+    std::vector<Tensor> MatMulNode::Backward(const std::vector<Tensor>& gradOutputs)
     {
-    public:
-        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override
+        Tensor dY = gradOutputs[0];
+        Tensor A = m_inputs[0];
+        Tensor B = m_inputs[1];
+
+        int a_rows = A.dim(0);
+        int a_cols = (A.rank() == 1) ? 1 : A.dim(1);
+        int b_rows = B.dim(0);
+        int b_cols = (B.rank() == 1) ? 1 : B.dim(1);
+
+        // Compute dA = dY * B^T
+        Tensor dA({a_rows, a_cols});
+        dA.asMatrix(a_rows, a_cols) = dY.asMatrix(a_rows, b_cols) * B.asMatrix(b_rows, b_cols).transpose();
+
+        // Compute dB = A^T * dY
+        Tensor dB({b_rows, b_cols});
+        dB.asMatrix(b_rows, b_cols) = A.asMatrix(a_rows, a_cols).transpose() * dY.asMatrix(a_rows, b_cols);
+
+        return { dA, dB };
+    }
+
+    std::vector<Tensor> AddNode::Backward(const std::vector<Tensor>& gradOutputs)
+    {
+        Tensor dY = gradOutputs[0];
+        return { dY.clone(), dY.clone() };
+    }
+
+    std::vector<Tensor> ReLUNode::Backward(const std::vector<Tensor>& gradOutputs)
+    {
+        Tensor dY = gradOutputs[0];
+        Tensor X = m_inputs[0];
+
+        Tensor dX(X.shape());
+        for (size_t i = 0; i < X.size(); ++i)
         {
-            Tensor dY = gradOutputs[0];
-            Tensor A = m_inputs[0];
-            Tensor B = m_inputs[1];
-
-            int a_rows = A.dim(0);
-            int a_cols = (A.rank() == 1) ? 1 : A.dim(1);
-            int b_rows = B.dim(0);
-            int b_cols = (B.rank() == 1) ? 1 : B.dim(1);
-
-            // Compute dA = dY * B^T
-            Tensor dA({a_rows, a_cols});
-            dA.asMatrix(a_rows, a_cols) = dY.asMatrix(a_rows, b_cols) * B.asMatrix(b_rows, b_cols).transpose();
-
-            // Compute dB = A^T * dY
-            Tensor dB({b_rows, b_cols});
-            dB.asMatrix(b_rows, b_cols) = A.asMatrix(a_rows, a_cols).transpose() * dY.asMatrix(a_rows, b_cols);
-
-            return { dA, dB };
+            dX[i] = (X[i] > 0.0) ? dY[i] : 0.0;
         }
-    };
 
-    /**
-     * @brief Node for Element-wise Addition.
-     *
-     * Mathematical Formula:
-     * Forward:
-     *   Y = A + B
-     * Backward:
-     *   dY = gradOutputs[0]
-     *   dA = dY
-     *   dB = dY
-     */
-    class AddNode : public Node
+        return { dX };
+    }
+
+    std::vector<Tensor> SoftmaxNode::Backward(const std::vector<Tensor>& gradOutputs)
     {
-    public:
-        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override
+        Tensor dY = gradOutputs[0];
+        auto outImpl = m_outputs[0].lock();
+        
+        if (outImpl == nullptr)
         {
-            Tensor dY = gradOutputs[0];
-            // Since shape dimensions are matched, gradients are identical.
-            return { dY.clone(), dY.clone() };
+            throw std::runtime_error("Softmax backward failed due to expired output reference.");
         }
-    };
 
-    /**
-     * @brief Node for ReLU Activation.
-     *
-     * Mathematical Formula:
-     * Forward:
-     *   Y = max(0, X)
-     * Backward:
-     *   dX = dY * (X > 0)
-     */
-    class ReLUNode : public Node
-    {
-    public:
-        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override
+        Tensor S(outImpl);
+        Tensor dX(S.shape());
+
+        int rows = S.dim(0);
+        int cols = (S.rank() == 1) ? 1 : S.dim(1);
+
+        Eigen::MatrixXd matS = S.asMatrix(rows, cols);
+        Eigen::MatrixXd matdY = dY.asMatrix(rows, cols);
+        Eigen::MatrixXd matdX(rows, cols);
+
+        for (int j = 0; j < cols; ++j)
         {
-            Tensor dY = gradOutputs[0];
-            Tensor X = m_inputs[0];
-
-            Tensor dX(X.shape());
-            for (size_t i = 0; i < X.size(); ++i)
+            double sum_dY_S = 0.0;
+            for (int i = 0; i < rows; ++i)
             {
-                dX[i] = (X[i] > 0.0) ? dY[i] : 0.0;
+                sum_dY_S += matdY(i, j) * matS(i, j);
             }
 
-            return { dX };
-        }
-    };
-
-    /**
-     * @brief Node for Mean Squared Error Loss.
-     *
-     * Mathematical Formula:
-     * Forward:
-     *   L = (1 / N) * sum((pred - target)^2)
-     * Backward:
-     *   dL = gradOutputs[0] (which is typically 1.0)
-     *   dPred = dL * (2 / N) * (pred - target)
-     *   dTarget = 0 (since target does not require gradient)
-     */
-    class MseLossNode : public Node
-    {
-    public:
-        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override
-        {
-            Tensor dL = gradOutputs[0];
-            Tensor pred = m_inputs[0];
-            Tensor target = m_inputs[1];
-            double N = static_cast<double>(pred.size());
-
-            Tensor dPred(pred.shape());
-            double scale = (2.0 / N) * dL[0];
-
-            for (size_t i = 0; i < pred.size(); ++i)
+            for (int i = 0; i < rows; ++i)
             {
-                dPred[i] = scale * (pred[i] - target[i]);
+                matdX(i, j) = matS(i, j) * (matdY(i, j) - sum_dY_S);
             }
-
-            // target doesn't require gradients, but we return a zero gradient to align index
-            Tensor dTarget(target.shape());
-
-            return { dPred, dTarget };
         }
-    };
+
+        dX.asMatrix(rows, cols) = matdX;
+        return { dX };
+    }
+
+    std::vector<Tensor> MseLossNode::Backward(const std::vector<Tensor>& gradOutputs)
+    {
+        Tensor dL = gradOutputs[0];
+        Tensor pred = m_inputs[0];
+        Tensor target = m_inputs[1];
+        double N = static_cast<double>(pred.size());
+
+        Tensor dPred(pred.shape());
+        double scale = (2.0 / N) * dL[0];
+
+        for (size_t i = 0; i < pred.size(); ++i)
+        {
+            dPred[i] = scale * (pred[i] - target[i]);
+        }
+
+        Tensor dTarget(target.shape());
+
+        return { dPred, dTarget };
+    }
+
+    std::vector<Tensor> TransposeNode::Backward(const std::vector<Tensor>& gradOutputs)
+    {
+        Tensor dY = gradOutputs[0];
+        Tensor dX({dY.dim(1), dY.dim(0)});
+        dX.asMatrix(dY.dim(1), dY.dim(0)) = dY.asMatrix(dY.dim(0), dY.dim(1)).transpose();
+        return { dX };
+    }
+
+    std::vector<Tensor> SliceNode::Backward(const std::vector<Tensor>& gradOutputs)
+    {
+        Tensor dY = gradOutputs[0];
+        Tensor X = m_inputs[0];
+        Tensor dX(X.shape());
+
+        int rows = m_endRow - m_startRow;
+        int cols = X.dim(1);
+        dX.asMatrix(X.dim(0), cols).block(m_startRow, 0, rows, cols) = dY.asMatrix(rows, cols);
+
+        return { dX };
+    }
 
     // ------------------------------------------------------------
     // Operations Execution
@@ -473,94 +484,6 @@ namespace tardigrade::autograd
         return Y;
     }
 
-    Tensor mse_loss(const Tensor& pred, const Tensor& target)
-    {
-        if (pred.shape() != target.shape())
-        {
-            throw std::runtime_error("Shape mismatch for mse_loss.");
-        }
-
-        Tensor loss({1}, pred.requiresGrad() || target.requiresGrad());
-        double sum = 0.0;
-        for (size_t i = 0; i < pred.size(); ++i)
-        {
-            double diff = pred[i] - target[i];
-            sum += diff * diff;
-        }
-        loss[0] = sum / static_cast<double>(pred.size());
-
-        if (loss.requiresGrad())
-        {
-            auto node = std::make_shared<MseLossNode>();
-            node->m_inputs = { pred, target };
-
-            if (pred.creator())
-            {
-                node->m_parents.push_back(pred.creator());
-            }
-            if (target.creator())
-            {
-                node->m_parents.push_back(target.creator());
-            }
-
-            loss.setCreator(node);
-            node->m_outputs.push_back(loss.m_impl);
-        }
-
-        return loss;
-    }
-
-    /**
-     * @brief Node for Softmax Activation.
-     *
-     * Mathematical Formula:
-     * Forward:
-     *   S_ij = exp(X_ij - max_k(X_kj)) / sum_k(exp(X_kj - max_m(X_mj)))
-     * Backward:
-     *   dX_ij = S_ij * (dY_ij - sum_k(dY_kj * S_kj))
-     */
-    class SoftmaxNode : public Node
-    {
-    public:
-        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override
-        {
-            Tensor dY = gradOutputs[0];
-            auto outImpl = m_outputs[0].lock();
-            
-            if (outImpl == nullptr)
-            {
-                throw std::runtime_error("Softmax backward failed due to expired output reference.");
-            }
-
-            Tensor S(outImpl);
-            Tensor dX(S.shape());
-
-            int rows = S.dim(0);
-            int cols = (S.rank() == 1) ? 1 : S.dim(1);
-
-            Eigen::MatrixXd matS = S.asMatrix(rows, cols);
-            Eigen::MatrixXd matdY = dY.asMatrix(rows, cols);
-            Eigen::MatrixXd matdX(rows, cols);
-
-            for (int j = 0; j < cols; ++j)
-            {
-                double sum_dY_S = 0.0;
-                for (int i = 0; i < rows; ++i)
-                {
-                    sum_dY_S += matdY(i, j) * matS(i, j);
-                }
-
-                for (int i = 0; i < rows; ++i)
-                {
-                    matdX(i, j) = matS(i, j) * (matdY(i, j) - sum_dY_S);
-                }
-            }
-
-            dX.asMatrix(rows, cols) = matdX;
-            return { dX };
-        }
-    };
-
     Tensor softmax(const Tensor& X)
     {
         int rows = X.dim(0);
@@ -606,56 +529,172 @@ namespace tardigrade::autograd
         return Y;
     }
 
+    Tensor mse_loss(const Tensor& pred, const Tensor& target)
+    {
+        if (pred.shape() != target.shape())
+        {
+            throw std::runtime_error("Shape mismatch for mse_loss.");
+        }
+
+        Tensor loss({1}, pred.requiresGrad() || target.requiresGrad());
+        double sum = 0.0;
+        for (size_t i = 0; i < pred.size(); ++i)
+        {
+            double diff = pred[i] - target[i];
+            sum += diff * diff;
+        }
+        loss[0] = sum / static_cast<double>(pred.size());
+
+        if (loss.requiresGrad())
+        {
+            auto node = std::make_shared<MseLossNode>();
+            node->m_inputs = { pred, target };
+
+            if (pred.creator())
+            {
+                node->m_parents.push_back(pred.creator());
+            }
+            if (target.creator())
+            {
+                node->m_parents.push_back(target.creator());
+            }
+
+            loss.setCreator(node);
+            node->m_outputs.push_back(loss.m_impl);
+        }
+
+        return loss;
+    }
+
     /**
-     * @brief Node for Tensor Transpose.
+     * @brief Node for Softmax Activation combined with Cross Entropy Loss.
      *
      * Mathematical Formula:
      * Forward:
-     *   Y = X^T
+     *   S_ki = exp(logits_ki - max_j(logits_ji)) / sum_j(exp(logits_ji - max_j(logits_ji)))
+     *   L = -(1/B) * sum_i(log(S_targeti, i + epsilon))
      * Backward:
-     *   dX = dY^T
+     *   dLogits_ki = dL/B * (S_ki - y_ki)
+     *   dTarget = 0
      */
-    class TransposeNode : public Node
+    std::vector<Tensor> SoftmaxCrossEntropyNode::Backward(const std::vector<Tensor>& gradOutputs)
     {
-    public:
-        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override
-        {
-            Tensor dY = gradOutputs[0];
-            Tensor dX({dY.dim(1), dY.dim(0)});
-            dX.asMatrix(dY.dim(1), dY.dim(0)) = dY.asMatrix(dY.dim(0), dY.dim(1)).transpose();
-            return { dX };
-        }
-    };
+        Tensor dL = gradOutputs[0];
+        Tensor logits = m_inputs[0];
+        Tensor target = m_inputs[1];
 
-    /**
-     * @brief Node for Tensor Row-Slicing.
-     *
-     * Mathematical Formula:
-     * Forward:
-     *   Y = X[startRow:endRow, :]
-     * Backward:
-     *   dX = zeros(X.shape)
-     *   dX[startRow:endRow, :] = dY
-     */
-    class SliceNode : public Node
+        int rows = logits.dim(0);
+        int cols = (logits.rank() == 1) ? 1 : logits.dim(1);
+        double B = static_cast<double>(cols);
+
+        Tensor dLogits(logits.shape());
+
+        Eigen::MatrixXd matLogits = logits.asMatrix(rows, cols);
+        Eigen::MatrixXd matS(rows, cols);
+
+        for (int j = 0; j < cols; ++j)
+        {
+            double maxVal = matLogits.col(j).maxCoeff();
+            double sum = 0.0;
+            
+            for (int i = 0; i < rows; ++i)
+            {
+                matS(i, j) = std::exp(matLogits(i, j) - maxVal);
+                sum += matS(i, j);
+            }
+
+            for (int i = 0; i < rows; ++i)
+            {
+                matS(i, j) /= sum;
+            }
+        }
+
+        Eigen::MatrixXd matdLogits(rows, cols);
+        double scale = dL[0] / B;
+
+        for (int j = 0; j < cols; ++j)
+        {
+            int targetClass = static_cast<int>(target[j]);
+            for (int i = 0; i < rows; ++i)
+            {
+                double y = (i == targetClass) ? 1.0 : 0.0;
+                matdLogits(i, j) = scale * (matS(i, j) - y);
+            }
+        }
+
+        dLogits.asMatrix(rows, cols) = matdLogits;
+        Tensor dTarget(target.shape());
+
+        return { dLogits, dTarget };
+    }
+
+    Tensor softmax_cross_entropy(const Tensor& logits, const Tensor& target)
     {
-    public:
-        int m_startRow;
-        int m_endRow;
-
-        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override
+        if (logits.rank() != 2 || target.rank() != 2)
         {
-            Tensor dY = gradOutputs[0];
-            Tensor X = m_inputs[0];
-            Tensor dX(X.shape()); // Initialized to 0.0
-
-            int rows = m_endRow - m_startRow;
-            int cols = X.dim(1);
-            dX.asMatrix(X.dim(0), cols).block(m_startRow, 0, rows, cols) = dY.asMatrix(rows, cols);
-
-            return { dX };
+            throw std::runtime_error("SoftmaxCrossEntropy expects 2D tensors.");
         }
-    };
+
+        int rows = logits.dim(0);
+        int cols = logits.dim(1);
+
+        Tensor loss({1}, logits.requiresGrad() || target.requiresGrad());
+
+        Eigen::MatrixXd matLogits = logits.asMatrix(rows, cols);
+        Eigen::MatrixXd matS(rows, cols);
+
+        for (int j = 0; j < cols; ++j)
+        {
+            double maxVal = matLogits.col(j).maxCoeff();
+            double sum = 0.0;
+            
+            for (int i = 0; i < rows; ++i)
+            {
+                matS(i, j) = std::exp(matLogits(i, j) - maxVal);
+                sum += matS(i, j);
+            }
+
+            for (int i = 0; i < rows; ++i)
+            {
+                matS(i, j) /= sum;
+            }
+        }
+
+        double sumLoss = 0.0;
+        constexpr double eps = 1e-15;
+
+        for (int j = 0; j < cols; ++j)
+        {
+            int targetClass = static_cast<int>(target[j]);
+            if (targetClass < 0 || targetClass >= rows)
+            {
+                throw std::runtime_error("Target index out of range in SoftmaxCrossEntropy.");
+            }
+            sumLoss -= std::log(matS(targetClass, j) + eps);
+        }
+
+        loss[0] = sumLoss / static_cast<double>(cols);
+
+        if (loss.requiresGrad())
+        {
+            auto node = std::make_shared<SoftmaxCrossEntropyNode>();
+            node->m_inputs = { logits, target };
+            
+            if (logits.creator())
+            {
+                node->m_parents.push_back(logits.creator());
+            }
+            if (target.creator())
+            {
+                node->m_parents.push_back(target.creator());
+            }
+
+            loss.setCreator(node);
+            node->m_outputs.push_back(loss.m_impl);
+        }
+
+        return loss;
+    }
 
     Tensor transpose(const Tensor& X)
     {
