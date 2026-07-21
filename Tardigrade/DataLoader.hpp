@@ -55,6 +55,18 @@ public:
                         int flag = cv::IMREAD_GRAYSCALE);
 
   /**
+   * @brief Set the default batch size.
+   * @param batchSize Default batch size for batch retrieval.
+   */
+  void SetBatchSize(size_t batchSize);
+
+  /**
+   * @brief Get the default batch size.
+   * @return The configured batch size.
+   */
+  size_t GetBatchSize() const;
+
+  /**
    * @brief Get the total size of the dataset.
    * @return The number of samples.
    */
@@ -77,18 +89,18 @@ public:
   /**
    * @brief Retrieve a batch of image tensors stacked together.
    * @param startIdx The starting index of the batch.
-   * @param batchSize The size of the batch.
+   * @param batchSize The size of the batch (0 uses configured m_batchSize).
    * @return Combined batch Tensor of shape (featureSize, actualBatchSize).
    */
-  Tensor GetBatch(size_t startIdx, size_t batchSize) const;
+  Tensor GetBatch(size_t startIdx, size_t batchSize = 0) const;
 
   /**
    * @brief Retrieve a batch of labels as a Tensor.
    * @param startIdx The starting index of the batch.
-   * @param batchSize The size of the batch.
+   * @param batchSize The size of the batch (0 uses configured m_batchSize).
    * @return Tensor representing the labels.
    */
-  Tensor GetLabelBatch(size_t startIdx, size_t batchSize) const;
+  Tensor GetLabelBatch(size_t startIdx, size_t batchSize = 0) const;
 
   /**
    * @brief Shuffle the dataset.
@@ -107,6 +119,7 @@ private:
   Tensor ReadImage(const std::string &path, MatSize target, int flag) const;
 
   LoadStrategy m_strategy;
+  size_t m_batchSize{1};
   std::vector<Tensor> m_data;
   std::vector<std::string> m_paths;
   std::vector<int> m_labels;

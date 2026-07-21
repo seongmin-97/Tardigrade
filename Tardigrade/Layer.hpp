@@ -40,6 +40,11 @@ namespace tardigrade::layer
         virtual void InitWeight() {}
 
         virtual void SetBatchSize(int batchSize) {}
+
+        virtual int GetBatchSize() const
+        {
+            return 1;
+        }
     };
 
     /**
@@ -62,6 +67,8 @@ namespace tardigrade::layer
         std::vector<Tensor> GetParameters() override;
 
         void SetBatchSize(int batchSize) override;
+
+        int GetBatchSize() const override;
 
         /**
          * @brief Initializes weight matrix using He (Kaiming) normal initialization.

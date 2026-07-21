@@ -35,6 +35,7 @@ int main()
     // --------------------------------------------------------
     std::cout << "[INFO] Loading dataset...\n";
     DataLoader loader(LoadStrategy::EAGER);
+    loader.SetBatchSize(batchSize);
     loader.LoadImageDataset(datasetRoot, {28, 28}, cv::IMREAD_GRAYSCALE);
 
     if (loader.GetDataSize() == 0)
@@ -68,44 +69,16 @@ int main()
     for (int epoch = 0; epoch < numEpochs; ++epoch)
     {
         loader.Shuffle(rng);
-
-        double totalLoss = 0.0;
-        double totalMetric = 0.0;
-        int processed = 0;
+        model.ResetMetrics();
 
         for (size_t i = 0; i < loader.GetDataSize(); i += batchSize)
         {
-            size_t currentBatchSize = std::min(static_cast<size_t>(batchSize), loader.GetDataSize() - i);
+            Tensor batchInput = loader.GetBatch(i);
+            Tensor batchTarget = loader.GetLabelBatch(i);
 
-            Tensor batchInput = loader.GetBatch(i, currentBatchSize);
-            Tensor batchTarget = loader.GetLabelBatch(i, currentBatchSize);
-
-            auto [loss, metricVal] = model.TrainStep(batchInput, batchTarget);
-
-            totalLoss += loss * currentBatchSize;
-            totalMetric += metricVal * currentBatchSize;
-
-            processed += currentBatchSize;
-
-            if ((processed / batchSize) % 10 == 0 || processed == loader.GetDataSize())
-            {
-                double avgLoss = totalLoss / processed;
-                double acc = (totalMetric / processed) * 100.0;
-
-                std::cout << "  [Epoch " << (epoch + 1) << "/" << numEpochs << " | Step " << processed << "/"
-                          << loader.GetDataSize() << "] Loss=" << avgLoss << " | " << model.GetMetric()->GetName()
-                          << "=" << acc << "%\n";
-            }
+            model.TrainStep(batchInput, batchTarget);
+            model.PrintProgress(loader.GetDataSize(), epoch + 1, numEpochs);
         }
-
-        double avgLoss = (processed > 0) ? (totalLoss / processed) : 0.0;
-        double acc = (processed > 0) ? ((totalMetric / processed) * 100.0) : 0.0;
-
-        std::cout << "========================================\n";
-        std::cout << "[Epoch " << (epoch + 1) << "/" << numEpochs << "] "
-                  << "Loss=" << avgLoss << " | " << model.GetMetric()->GetName() << "=" << acc << "%"
-                  << " | Samples=" << processed << "\n";
-        std::cout << "========================================\n\n";
     }
 
     std::cout << "[INFO] Training complete.\n";

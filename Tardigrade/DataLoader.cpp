@@ -131,8 +131,22 @@ void DataLoader::LoadImageDataset(const std::string& rootDir, MatSize target, in
 }
 
 // ------------------------------------------------------------
-// Getters
+// Getters & Setters
 // ------------------------------------------------------------
+void DataLoader::SetBatchSize(size_t batchSize)
+{
+    if (batchSize == 0)
+    {
+        throw std::invalid_argument("DataLoader: batchSize cannot be 0");
+    }
+    m_batchSize = batchSize;
+}
+
+size_t DataLoader::GetBatchSize() const
+{
+    return m_batchSize;
+}
+
 size_t DataLoader::GetDataSize() const
 {
     return m_labels.size();
@@ -170,12 +184,14 @@ int DataLoader::GetLabel(size_t index) const
 // ------------------------------------------------------------
 Tensor DataLoader::GetBatch(size_t startIdx, size_t batchSize) const
 {
-    if (startIdx >= GetDataSize() || batchSize == 0)
+    size_t targetBatchSize = (batchSize > 0) ? batchSize : m_batchSize;
+
+    if (startIdx >= GetDataSize() || targetBatchSize == 0)
     {
         throw std::runtime_error("DataLoader: invalid batch parameters");
     }
 
-    size_t actualSize = std::min(batchSize, GetDataSize() - startIdx);
+    size_t actualSize = std::min(targetBatchSize, GetDataSize() - startIdx);
     Tensor first = GetData(startIdx);
     int featureSize = static_cast<int>(first.size());
 
@@ -193,12 +209,14 @@ Tensor DataLoader::GetBatch(size_t startIdx, size_t batchSize) const
 
 Tensor DataLoader::GetLabelBatch(size_t startIdx, size_t batchSize) const
 {
-    if (startIdx >= GetDataSize() || batchSize == 0)
+    size_t targetBatchSize = (batchSize > 0) ? batchSize : m_batchSize;
+
+    if (startIdx >= GetDataSize() || targetBatchSize == 0)
     {
         throw std::runtime_error("DataLoader: invalid label batch parameters");
     }
 
-    size_t actualSize = std::min(batchSize, GetDataSize() - startIdx);
+    size_t actualSize = std::min(targetBatchSize, GetDataSize() - startIdx);
     Tensor batchTarget({ 1, static_cast<int>(actualSize) });
 
     for (size_t i = 0; i < actualSize; ++i)

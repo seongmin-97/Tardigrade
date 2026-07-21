@@ -80,6 +80,11 @@ namespace tardigrade::layer
         m_batchSize = batchSize;
     }
 
+    int Dense::GetBatchSize() const
+    {
+        return m_batchSize;
+    }
+
     void Dense::InitWeight()
     {
         std::random_device rd;
