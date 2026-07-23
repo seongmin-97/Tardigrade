@@ -45,7 +45,7 @@ Tensor SoftmaxCrossEntropy::Backward()
 Tensor SoftmaxCrossEntropy::GetProbs() const
 {
     // Return the Softmax probabilities. Since we want it to be computed on the current predictions
-    // without creating a new creator node if requiresGrad is not active.
+    // without creating a new grad node if requiresGrad is not active.
     return softmax(m_prediction);
 }
 

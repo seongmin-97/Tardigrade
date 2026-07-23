@@ -77,13 +77,13 @@ namespace tardigrade
     public:
         Shape m_shape;
         Storage m_storage;
-        std::shared_ptr<Node> m_creator;
+        std::shared_ptr<Node> m_gradNode;
         std::shared_ptr<TensorImpl> m_grad;
         bool m_requiresGrad;
 
     public:
         TensorImpl(const Shape& shape, bool requiresGrad = false)
-            : m_shape(shape), m_storage(0), m_creator(nullptr), m_grad(nullptr), m_requiresGrad(requiresGrad)
+            : m_shape(shape), m_storage(0), m_gradNode(nullptr), m_grad(nullptr), m_requiresGrad(requiresGrad)
         {
             size_t totalSize = 1;
             for (int dim : shape)
@@ -96,8 +96,6 @@ namespace tardigrade
 
     /**
      * @brief High-performance multi-dimensional Tensor supporting Automatic Differentiation.
-     *
-     * Wrapper class around std::shared_ptr<TensorImpl> matching PyTorch's signature.
      */
     class Tensor
     {
@@ -105,34 +103,11 @@ namespace tardigrade
         std::shared_ptr<TensorImpl> m_impl;
 
     public:
-        /**
-         * @brief Constructs a Tensor with a given shape.
-         */
         Tensor(const Shape& shape, bool requiresGrad = false);
-
-        /**
-         * @brief Default constructor creating an empty Tensor.
-         */
         Tensor();
-
-        /**
-         * @brief Constructs a Tensor from a shared implementation pointer.
-         */
         Tensor(std::shared_ptr<TensorImpl> impl);
 
-        /**
-         * @brief Shared pointer maps to Eigen matrix representation.
-         */
-        MatrixMap asMatrix(int rows, int cols);
-        ConstMatrixMap asMatrix(int rows, int cols) const;
-
-        /**
-         * @brief Shared pointer maps to Eigen vector representation.
-         */
-        VectorMap asVector();
-        ConstVectorMap asVector() const;
-
-        // Basic Dimensional getters
+        // Dimensional getters
         int rank() const;
         int dim(int index) const;
         const Shape& shape() const;
@@ -140,11 +115,10 @@ namespace tardigrade
         const double* data() const;
         size_t size() const;
 
-        // Operator overloading for 1D access
+        // Operator overloading for 1D/Multi-D access
         double& operator[](size_t index);
         const double& operator[](size_t index) const;
 
-        // Multi-dimensional index accessors
         template<typename... Args>
         double& operator()(Args... indices)
         {
@@ -159,34 +133,79 @@ namespace tardigrade
             return m_impl->m_storage[calculateIndex(idx)];
         }
 
-        /**
-         * @brief Initiates backpropagation from this loss Tensor.
-         */
+        // Reshape & N-D Axis Slicing
+        Tensor reshape(const Shape& newShape) const;
+        Tensor slice(int axis, int start, int end) const;
+        void setSlice(int axis, int index, const Tensor& src);
+        Tensor row(int index) const;
+        void setRow(int index, const Tensor& src);
+        Tensor col(int index) const;
+        void setCol(int index, const Tensor& src);
+        Tensor transpose() const;
+
+        // In-place Arithmetic Operators
+        Tensor& operator+=(const Tensor& rhs);
+        Tensor& operator-=(const Tensor& rhs);
+
+        // Eigen Expression Assignment Operator
+        template<typename Derived>
+        Tensor& operator=(const Eigen::DenseBase<Derived>& expr)
+        {
+            if (rank() == 2)
+            {
+                asMatrix() = expr;
+            }
+            else if (rank() == 1)
+            {
+                asVector() = expr;
+            }
+            else
+            {
+                throw std::runtime_error("Assignment from Eigen expression is only supported for 1D or 2D tensors.");
+            }
+            return *this;
+        }
+
+        // Autograd Graph & Backward
         void Backward();
-
-        /**
-         * @brief Breaks references within the computational graph to free memory.
-         */
         void ClearGraph();
-
-        /**
-         * @brief Zero out the current accumulated gradient.
-         */
         void zeroGrad();
-
-        /**
-         * @brief Creates a deep copy of the Tensor's data, detached from the graph.
-         */
         Tensor clone() const;
-
-        // Autograd status getters
         bool requiresGrad() const;
         Tensor grad() const;
         void setGrad(const Tensor& g);
-        std::shared_ptr<Node> creator() const;
-        void setCreator(std::shared_ptr<Node> node);
+        std::shared_ptr<Node> gradNode() const;
+        void setGradNode(std::shared_ptr<Node> node);
+
+    // Internal Backend accessors (restricted to core tensor ops)
+    public:
+        MatrixMap asMatrix();
+        ConstMatrixMap asMatrix() const;
+        MatrixMap asMatrix(int rows, int cols);
+        ConstMatrixMap asMatrix(int rows, int cols) const;
+        VectorMap asVector();
+        ConstVectorMap asVector() const;
 
     private:
         int calculateIndex(const std::vector<int>& indices) const;
     };
+
+    // Forward Computation Operations (Kernels)
+    Tensor matmul(const Tensor& A, const Tensor& B);
+    Tensor add(const Tensor& A, const Tensor& B);
+    Tensor sub(const Tensor& A, const Tensor& B);
+    Tensor concat(const std::vector<Tensor>& tensors, int axis = 0);
+    Tensor relu(const Tensor& X);
+    Tensor softmax(const Tensor& X);
+    Tensor mse_loss(const Tensor& pred, const Tensor& target);
+    Tensor softmax_cross_entropy(const Tensor& logits, const Tensor& target);
+    Tensor transpose(const Tensor& X);
+    Tensor slice(const Tensor& X, int startRow, int endRow);
+
+    // Global Tensor arithmetic operators
+    Tensor operator+(const Tensor& lhs, const Tensor& rhs);
+    Tensor operator-(const Tensor& lhs, const Tensor& rhs);
+    Tensor operator*(const Tensor& lhs, const Tensor& rhs);
+    Tensor operator*(const Tensor& lhs, double scalar);
+    Tensor operator*(double scalar, const Tensor& rhs);
 }

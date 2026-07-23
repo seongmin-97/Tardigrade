@@ -13,6 +13,8 @@ find_package(OpenCV REQUIRED)
 # Source files
 set(SOURCES
     Tardigrade/main.cpp
+    Tardigrade/tensor/Tensor.cpp
+    Tardigrade/tensor/Autograd.cpp
     Tardigrade/Activation.cpp
     Tardigrade/DataLoader.cpp
     Tardigrade/Layer.cpp
@@ -20,21 +22,20 @@ set(SOURCES
     Tardigrade/Model.cpp
     Tardigrade/Optimizer.cpp
     Tardigrade/Metric.cpp
-    Tardigrade/Autograd.cpp
 )
 
-# Header files (optional, but good for IDEs)
+# Header files
 set(HEADERS
+    Tardigrade/tensor/Tensor.hpp
+    Tardigrade/tensor/Autograd.hpp
+    Tardigrade/tensor/AutogradNodes.hpp
     Tardigrade/Activation.hpp
     Tardigrade/DataLoader.hpp
     Tardigrade/Layer.hpp
     Tardigrade/Loss.hpp
     Tardigrade/Model.hpp
-    Tardigrade/Tensor.hpp
     Tardigrade/Optimizer.hpp
     Tardigrade/Metric.hpp
-    Tardigrade/Autograd.hpp
-    Tardigrade/AutogradNodes.hpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
@@ -44,6 +45,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${EIGEN3_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/Tardigrade
+    ${CMAKE_CURRENT_SOURCE_DIR}/Tardigrade/tensor
 )
 
 # Link libraries

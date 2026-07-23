@@ -79,25 +79,20 @@ Tensor Softmax::Backward(const Tensor& gradOutput)
     m_gradient = Tensor(m_outputVector.shape());
     int rows = m_outputVector.dim(0);
     int cols = (m_outputVector.rank() == 1) ? 1 : m_outputVector.dim(1);
-    
-    Eigen::MatrixXd matS = m_outputVector.asMatrix(rows, cols);
-    Eigen::MatrixXd matdY = gradOutput.asMatrix(rows, cols);
-    Eigen::MatrixXd matdX(rows, cols);
 
     for (int j = 0; j < cols; ++j)
     {
         double dot = 0.0;
         for (int i = 0; i < rows; ++i)
         {
-            dot += matdY(i, j) * matS(i, j);
+            dot += gradOutput(i, j) * m_outputVector(i, j);
         }
 
         for (int i = 0; i < rows; ++i)
         {
-            matdX(i, j) = matS(i, j) * (matdY(i, j) - dot);
+            m_gradient(i, j) = m_outputVector(i, j) * (gradOutput(i, j) - dot);
         }
     }
 
-    m_gradient.asMatrix(rows, cols) = matdX;
     return m_gradient;
 }

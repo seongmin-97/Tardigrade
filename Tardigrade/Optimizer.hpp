@@ -32,17 +32,7 @@ public:
      * @brief Registers parameter Tensors to the optimizer.
      * @param params Vector of parameter Tensors.
      */
-    void AddParameters(const std::vector<Tensor> &params)
-    {
-        for (const auto &p : params)
-        {
-            if (!p.requiresGrad())
-            {
-                std::cerr << "[WARN] Tensor without requiresGrad=true registered to optimizer.\n";
-            }
-        }
-        m_parameters.insert(m_parameters.end(), params.begin(), params.end());
-    }
+    void AddParameters(const std::vector<Tensor> &params);
 
     /**
      * @brief Performs a single parameter update step.

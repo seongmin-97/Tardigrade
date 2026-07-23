@@ -38,6 +38,42 @@ namespace tardigrade
     };
 
     /**
+     * @brief Node for Element-wise Subtraction.
+     *
+     * Mathematical Formula:
+     * Forward:
+     *   Y = A - B
+     * Backward:
+     *   dY = gradOutputs[0]
+     *   dA = dY
+     *   dB = -dY
+     */
+    class SubNode : public Node
+    {
+    public:
+        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override;
+    };
+
+    /**
+     * @brief Node for Tensor Concatenation along an axis.
+     *
+     * Mathematical Formula:
+     * Forward:
+     *   Y = concat([T_1, T_2, ..., T_k], axis)
+     * Backward:
+     *   dT_i = dY.slice(axis, start_i, end_i)
+     */
+    class ConcatNode : public Node
+    {
+    public:
+        int m_axis;
+        std::vector<int> m_sizes;
+
+    public:
+        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override;
+    };
+
+    /**
      * @brief Node for ReLU Activation.
      *
      * Mathematical Formula:

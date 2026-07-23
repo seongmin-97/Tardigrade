@@ -76,11 +76,12 @@ namespace tardigrade::layer
         void InitWeight() override;
 
     public:
-        int m_inputSize;                  ///< Augmented input size (inputSize + 1 for bias)
+        int m_inputSize;                  ///< Input feature dimension (excluding bias)
         int m_outputSize;                 ///< Output size (number of neurons)
         int m_batchSize;                  ///< Batch size
 
-        Tensor m_weight;                  ///< Weight matrix of shape (inputSize + 1, outputSize)
+        Tensor m_weight;                  ///< Weight matrix of shape (inputSize, outputSize)
+        Tensor m_bias;                    ///< Bias vector of shape (1, outputSize)
         activation::ACTIVATION m_enumAct; ///< Type identifier of the activation
     };
 }

@@ -196,12 +196,12 @@ Tensor DataLoader::GetBatch(size_t startIdx, size_t batchSize) const
     int featureSize = static_cast<int>(first.size());
 
     Tensor batch({ featureSize, static_cast<int>(actualSize) });
-    batch.asMatrix(featureSize, static_cast<int>(actualSize)).col(0) = first.asVector();
+    batch.setCol(0, first);
 
     for (size_t i = 1; i < actualSize; ++i)
     {
         Tensor sample = GetData(startIdx + i);
-        batch.asMatrix(featureSize, static_cast<int>(actualSize)).col(static_cast<int>(i)) = sample.asVector();
+        batch.setCol(static_cast<int>(i), sample);
     }
 
     return batch;
