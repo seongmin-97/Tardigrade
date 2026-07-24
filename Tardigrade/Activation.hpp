@@ -102,7 +102,7 @@ namespace tardigrade::activation
 	class Softmax : public Activation
 	{
 	public :
-		Softmax(int inputSize, int batchSize) : Activation(inputSize, batchSize) {}
+		Softmax(int inputSize = 0, int batchSize = 0) : Activation(inputSize, batchSize) {}
 
 		Tensor Forward(const Tensor& input) override;
 		Tensor Backward(const Tensor& gradOutput) override;

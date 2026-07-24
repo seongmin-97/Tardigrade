@@ -107,6 +107,14 @@ namespace tardigrade
         Tensor();
         Tensor(std::shared_ptr<TensorImpl> impl);
 
+        // Factory methods for Tensor initialization
+        static Tensor zeros(const Shape& shape, bool requiresGrad = false);
+        static Tensor ones(const Shape& shape, bool requiresGrad = false);
+        static Tensor fill(const Shape& shape, double value, bool requiresGrad = false);
+
+        // Fill instance data with a constant value
+        void fill(double value);
+
         // Dimensional getters
         int rank() const;
         int dim(int index) const;
@@ -190,17 +198,20 @@ namespace tardigrade
         int calculateIndex(const std::vector<int>& indices) const;
     };
 
-    // Forward Computation Operations (Kernels)
+    // Primitive Forward Operations
     Tensor matmul(const Tensor& A, const Tensor& B);
     Tensor add(const Tensor& A, const Tensor& B);
     Tensor sub(const Tensor& A, const Tensor& B);
-    Tensor concat(const std::vector<Tensor>& tensors, int axis = 0);
+    Tensor mul(const Tensor& A, const Tensor& B);
+    Tensor div(const Tensor& A, const Tensor& B);
+    Tensor div(const Tensor& A, double scalar);
+    Tensor exp(const Tensor& X);
+    Tensor log(const Tensor& X);
+    Tensor sum(const Tensor& X, int axis = -1);
     Tensor relu(const Tensor& X);
-    Tensor softmax(const Tensor& X);
-    Tensor mse_loss(const Tensor& pred, const Tensor& target);
-    Tensor softmax_cross_entropy(const Tensor& logits, const Tensor& target);
     Tensor transpose(const Tensor& X);
     Tensor slice(const Tensor& X, int startRow, int endRow);
+    Tensor concat(const std::vector<Tensor>& tensors, int axis = 0);
 
     // Global Tensor arithmetic operators
     Tensor operator+(const Tensor& lhs, const Tensor& rhs);
@@ -208,4 +219,6 @@ namespace tardigrade
     Tensor operator*(const Tensor& lhs, const Tensor& rhs);
     Tensor operator*(const Tensor& lhs, double scalar);
     Tensor operator*(double scalar, const Tensor& rhs);
+    Tensor operator/(const Tensor& lhs, const Tensor& rhs);
+    Tensor operator/(const Tensor& lhs, double scalar);
 }

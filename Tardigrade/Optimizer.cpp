@@ -71,8 +71,8 @@ void Adam::InitializeMoments()
 
     for (const auto &param : m_parameters)
     {
-        m_m.emplace_back(Tensor(param.shape()));
-        m_v.emplace_back(Tensor(param.shape()));
+        m_m.emplace_back(Tensor::zeros(param.shape()));
+        m_v.emplace_back(Tensor::zeros(param.shape()));
     }
     m_initialized = true;
 }

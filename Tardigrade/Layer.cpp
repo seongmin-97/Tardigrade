@@ -46,8 +46,7 @@ namespace tardigrade::layer
 
         // Broadcast bias vector by multiplying m_bias^T with a constant row of ones.
         // ones: shape (1, m_batchSize) initialized to 1.0
-        Tensor ones({1, m_batchSize}, false);
-        std::fill(ones.data(), ones.data() + ones.size(), 1.0);
+        Tensor ones = Tensor::ones({1, m_batchSize}, false);
 
         Tensor Y_bias = matmul(transpose(m_bias), ones);
 
@@ -62,7 +61,8 @@ namespace tardigrade::layer
         }
         else if (m_enumAct == activation::ACTIVATION::Softmax)
         {
-            output = softmax(logits);
+            activation::Softmax act;
+            output = act.Forward(logits);
         }
         else
         {

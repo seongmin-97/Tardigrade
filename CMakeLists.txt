@@ -28,7 +28,6 @@ set(SOURCES
 set(HEADERS
     Tardigrade/tensor/Tensor.hpp
     Tardigrade/tensor/Autograd.hpp
-    Tardigrade/tensor/AutogradNodes.hpp
     Tardigrade/Activation.hpp
     Tardigrade/DataLoader.hpp
     Tardigrade/Layer.hpp

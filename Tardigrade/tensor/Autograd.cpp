@@ -1,5 +1,4 @@
 #include "Autograd.hpp"
-#include "AutogradNodes.hpp"
 #include <cmath>
 #include <numeric>
 #include <algorithm>
@@ -150,6 +149,91 @@ namespace tardigrade
         return { dA, dB };
     }
 
+    std::vector<Tensor> MulNode::Backward(const std::vector<Tensor>& gradOutputs)
+    {
+        Tensor dY = gradOutputs[0];
+        Tensor A = m_inputs[0];
+        Tensor B = m_inputs[1];
+
+        Tensor dA = mul(dY, B);
+        Tensor dB = mul(dY, A);
+
+        return { dA, dB };
+    }
+
+    std::vector<Tensor> DivNode::Backward(const std::vector<Tensor>& gradOutputs)
+    {
+        Tensor dY = gradOutputs[0];
+        Tensor A = m_inputs[0];
+        Tensor B = m_inputs[1];
+
+        Tensor dA = div(dY, B);
+        Tensor dB = (mul(dY, A) * -1.0) / mul(B, B);
+
+        return { dA, dB };
+    }
+
+    std::vector<Tensor> ExpNode::Backward(const std::vector<Tensor>& gradOutputs)
+    {
+        Tensor dY = gradOutputs[0];
+        auto outImpl = m_outputs[0].lock();
+        if (outImpl == nullptr)
+        {
+            throw std::runtime_error("Exp backward failed due to expired output reference.");
+        }
+        Tensor Y(outImpl);
+        Tensor dX = mul(dY, Y);
+        return { dX };
+    }
+
+    std::vector<Tensor> LogNode::Backward(const std::vector<Tensor>& gradOutputs)
+    {
+        Tensor dY = gradOutputs[0];
+        Tensor X = m_inputs[0];
+        Tensor dX = div(dY, X);
+        return { dX };
+    }
+
+    std::vector<Tensor> SumNode::Backward(const std::vector<Tensor>& gradOutputs)
+    {
+        Tensor dY = gradOutputs[0];
+        Tensor X = m_inputs[0];
+        Tensor dX(X.shape());
+
+        if (m_axis == -1 || X.rank() == 1)
+        {
+            dX.fill(dY[0]);
+        }
+        else if (X.rank() == 2)
+        {
+            int rows = X.dim(0);
+            int cols = X.dim(1);
+
+            if (m_axis == 0)
+            {
+                for (int j = 0; j < cols; ++j)
+                {
+                    for (int i = 0; i < rows; ++i)
+                    {
+                        dX(i, j) = dY(0, j);
+                    }
+                }
+            }
+            else if (m_axis == 1)
+            {
+                for (int i = 0; i < rows; ++i)
+                {
+                    for (int j = 0; j < cols; ++j)
+                    {
+                        dX(i, j) = dY(i, 0);
+                    }
+                }
+            }
+        }
+
+        return { dX };
+    }
+
     std::vector<Tensor> ConcatNode::Backward(const std::vector<Tensor>& gradOutputs)
     {
         Tensor dY = gradOutputs[0];
@@ -181,59 +265,6 @@ namespace tardigrade
         return { dX };
     }
 
-    std::vector<Tensor> SoftmaxNode::Backward(const std::vector<Tensor>& gradOutputs)
-    {
-        Tensor dY = gradOutputs[0];
-        auto outImpl = m_outputs[0].lock();
-        
-        if (outImpl == nullptr)
-        {
-            throw std::runtime_error("Softmax backward failed due to expired output reference.");
-        }
-
-        Tensor S(outImpl);
-        Tensor dX(S.shape());
-
-        int rows = S.dim(0);
-        int cols = (S.rank() == 1) ? 1 : S.dim(1);
-
-        for (int j = 0; j < cols; ++j)
-        {
-            double sum_dY_S = 0.0;
-            for (int i = 0; i < rows; ++i)
-            {
-                sum_dY_S += dY(i, j) * S(i, j);
-            }
-
-            for (int i = 0; i < rows; ++i)
-            {
-                dX(i, j) = S(i, j) * (dY(i, j) - sum_dY_S);
-            }
-        }
-
-        return { dX };
-    }
-
-    std::vector<Tensor> MseLossNode::Backward(const std::vector<Tensor>& gradOutputs)
-    {
-        Tensor dL = gradOutputs[0];
-        Tensor pred = m_inputs[0];
-        Tensor target = m_inputs[1];
-        double N = static_cast<double>(pred.size());
-
-        Tensor dPred(pred.shape());
-        double scale = (2.0 / N) * dL[0];
-
-        for (size_t i = 0; i < pred.size(); ++i)
-        {
-            dPred[i] = scale * (pred[i] - target[i]);
-        }
-
-        Tensor dTarget(target.shape());
-
-        return { dPred, dTarget };
-    }
-
     std::vector<Tensor> TransposeNode::Backward(const std::vector<Tensor>& gradOutputs)
     {
         Tensor dY = gradOutputs[0];
@@ -244,7 +275,7 @@ namespace tardigrade
     {
         Tensor dY = gradOutputs[0];
         Tensor X = m_inputs[0];
-        Tensor dX(X.shape());
+        Tensor dX = Tensor::zeros(X.shape());
 
         int rows = m_endRow - m_startRow;
         int cols = X.dim(1);
@@ -257,58 +288,5 @@ namespace tardigrade
         }
 
         return { dX };
-    }
-
-    std::vector<Tensor> SoftmaxCrossEntropyNode::Backward(const std::vector<Tensor>& gradOutputs)
-    {
-        Tensor dL = gradOutputs[0];
-        Tensor logits = m_inputs[0];
-        Tensor target = m_inputs[1];
-
-        int rows = logits.dim(0);
-        int cols = (logits.rank() == 1) ? 1 : logits.dim(1);
-        double B = static_cast<double>(cols);
-
-        Tensor dLogits(logits.shape());
-        double scale = dL[0] / B;
-
-        // Calculate Softmax S in pure Tensor operations
-        Tensor S(logits.shape());
-        for (int j = 0; j < cols; ++j)
-        {
-            double maxVal = logits(0, j);
-            for (int i = 1; i < rows; ++i)
-            {
-                if (logits(i, j) > maxVal)
-                {
-                    maxVal = logits(i, j);
-                }
-            }
-
-            double sum = 0.0;
-            for (int i = 0; i < rows; ++i)
-            {
-                S(i, j) = std::exp(logits(i, j) - maxVal);
-                sum += S(i, j);
-            }
-
-            for (int i = 0; i < rows; ++i)
-            {
-                S(i, j) /= sum;
-            }
-        }
-
-        for (int j = 0; j < cols; ++j)
-        {
-            int targetClass = static_cast<int>(target[j]);
-            for (int i = 0; i < rows; ++i)
-            {
-                double y = (i == targetClass) ? 1.0 : 0.0;
-                dLogits(i, j) = scale * (S(i, j) - y);
-            }
-        }
-
-        Tensor dTarget(target.shape());
-        return { dLogits, dTarget };
     }
 }
