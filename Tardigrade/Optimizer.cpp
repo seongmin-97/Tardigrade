@@ -41,9 +41,11 @@ void SGD::Step()
         if (grad.m_impl != nullptr && grad.m_impl->m_storage.GetSize() > 0)
         {
             const size_t size = param.size();
+            double *pData = param.data();
+            const double *gData = grad.data();
             for (size_t i = 0; i < size; ++i)
             {
-                param[i] -= m_learningRate * grad[i];
+                pData[i] -= m_learningRate * gData[i];
             }
         }
     }
@@ -103,17 +105,23 @@ void Adam::Step()
         Tensor &v = m_v[i];
 
         const size_t size = param.size();
+        double *pData = param.data();
+        const double *gData = grad.data();
+        double *mData = m.data();
+        double *vData = v.data();
+
         for (size_t j = 0; j < size; ++j)
         {
-            double g = grad[j];
+            double g = gData[j];
 
-            m[j] = m_beta1 * m[j] + (1.0 - m_beta1) * g;
-            v[j] = m_beta2 * v[j] + (1.0 - m_beta2) * (g * g);
+            mData[j] = m_beta1 * mData[j] + (1.0 - m_beta1) * g;
+            vData[j] = m_beta2 * vData[j] + (1.0 - m_beta2) * (g * g);
 
-            double m_hat = m[j] / correction1;
-            double v_hat = v[j] / correction2;
+            double m_hat = mData[j] / correction1;
+            double v_hat = vData[j] / correction2;
 
-            param[j] -= m_learningRate * m_hat / (std::sqrt(v_hat) + m_epsilon);
+            pData[j] -= m_learningRate * m_hat / (std::sqrt(v_hat) + m_epsilon);
         }
     }
 }
+

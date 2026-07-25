@@ -196,15 +196,16 @@ Tensor DataLoader::GetBatch(size_t startIdx, size_t batchSize) const
     int featureSize = static_cast<int>(first.size());
 
     Tensor batch({ featureSize, static_cast<int>(actualSize) });
-    batch.setCol(0, first);
+    batch.setSelect(1, 0, first);
 
     for (size_t i = 1; i < actualSize; ++i)
     {
         Tensor sample = GetData(startIdx + i);
-        batch.setCol(static_cast<int>(i), sample);
+        batch.setSelect(1, static_cast<int>(i), sample);
     }
 
     return batch;
+
 }
 
 Tensor DataLoader::GetLabelBatch(size_t startIdx, size_t batchSize) const
@@ -221,10 +222,11 @@ Tensor DataLoader::GetLabelBatch(size_t startIdx, size_t batchSize) const
 
     for (size_t i = 0; i < actualSize; ++i)
     {
-        batchTarget[i] = static_cast<double>(m_labels[startIdx + i]);
+        batchTarget.data()[i] = static_cast<double>(m_labels[startIdx + i]);
     }
 
     return batchTarget;
+
 }
 
 // ------------------------------------------------------------

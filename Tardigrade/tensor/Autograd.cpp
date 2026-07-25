@@ -120,6 +120,42 @@ namespace tardigrade
     }
 
     // ------------------------------------------------------------
+    // Unbroadcast Helper Utility
+    // ------------------------------------------------------------
+
+    Tensor unbroadcast(const Tensor& grad, const Shape& targetShape)
+    {
+        if (grad.shape() == targetShape)
+        {
+            return grad;
+        }
+
+        Tensor res = grad;
+        int gradRank = static_cast<int>(grad.rank());
+        int targetRank = static_cast<int>(targetShape.size());
+
+        int rankDiff = gradRank - targetRank;
+        for (int i = 0; i < rankDiff; ++i)
+        {
+            res = sum(res, 0, false);
+        }
+
+        for (int i = 0; i < targetRank; ++i)
+        {
+            if (targetShape[i] == 1 && res.dim(i) > 1)
+            {
+                res = sum(res, i, true);
+            }
+        }
+
+        if (res.shape() != targetShape)
+        {
+            res = res.reshape(targetShape);
+        }
+        return res;
+    }
+
+    // ------------------------------------------------------------
     // Node Backward Implementations (PURE High-Level Tensor Ops)
     // ------------------------------------------------------------
 
@@ -138,14 +174,22 @@ namespace tardigrade
     std::vector<Tensor> AddNode::Backward(const std::vector<Tensor>& gradOutputs)
     {
         Tensor dY = gradOutputs[0];
-        return { dY.clone(), dY.clone() };
+        Tensor A = m_inputs[0];
+        Tensor B = m_inputs[1];
+
+        Tensor dA = unbroadcast(dY, A.shape());
+        Tensor dB = unbroadcast(dY, B.shape());
+        return { dA, dB };
     }
 
     std::vector<Tensor> SubNode::Backward(const std::vector<Tensor>& gradOutputs)
     {
         Tensor dY = gradOutputs[0];
-        Tensor dA = dY.clone();
-        Tensor dB = dY * (-1.0);
+        Tensor A = m_inputs[0];
+        Tensor B = m_inputs[1];
+
+        Tensor dA = unbroadcast(dY, A.shape());
+        Tensor dB = unbroadcast(dY * (-1.0), B.shape());
         return { dA, dB };
     }
 
@@ -155,8 +199,8 @@ namespace tardigrade
         Tensor A = m_inputs[0];
         Tensor B = m_inputs[1];
 
-        Tensor dA = mul(dY, B);
-        Tensor dB = mul(dY, A);
+        Tensor dA = unbroadcast(mul(dY, B), A.shape());
+        Tensor dB = unbroadcast(mul(dY, A), B.shape());
 
         return { dA, dB };
     }
@@ -167,8 +211,8 @@ namespace tardigrade
         Tensor A = m_inputs[0];
         Tensor B = m_inputs[1];
 
-        Tensor dA = div(dY, B);
-        Tensor dB = (mul(dY, A) * -1.0) / mul(B, B);
+        Tensor dA = unbroadcast(div(dY, B), A.shape());
+        Tensor dB = unbroadcast((mul(dY, A) * -1.0) / mul(B, B), B.shape());
 
         return { dA, dB };
     }
@@ -200,34 +244,37 @@ namespace tardigrade
         Tensor X = m_inputs[0];
         Tensor dX(X.shape());
 
-        if (m_axis == -1 || X.rank() == 1)
+        if (m_axis == -1)
         {
-            dX.fill(dY[0]);
+            dX.fill(dY.data()[0]);
         }
-        else if (X.rank() == 2)
+        else
         {
-            int rows = X.dim(0);
-            int cols = X.dim(1);
+            int normAxis = Tensor::normalizeAxis(m_axis, X.rank());
+            size_t totalElements = X.size();
+            const Shape& xStrides = X.strides();
+            std::vector<int> currIdx(X.rank());
 
-            if (m_axis == 0)
+            for (size_t i = 0; i < totalElements; ++i)
             {
-                for (int j = 0; j < cols; ++j)
+                size_t temp = i;
+                for (int d = 0; d < X.rank(); ++d)
                 {
-                    for (int i = 0; i < rows; ++i)
+                    currIdx[d] = temp / xStrides[d];
+                    temp %= xStrides[d];
+                }
+
+                std::vector<int> dyIdx;
+                for (int d = 0; d < X.rank(); ++d)
+                {
+                    if (d != normAxis)
                     {
-                        dX(i, j) = dY(0, j);
+                        dyIdx.push_back(currIdx[d]);
                     }
                 }
-            }
-            else if (m_axis == 1)
-            {
-                for (int i = 0; i < rows; ++i)
-                {
-                    for (int j = 0; j < cols; ++j)
-                    {
-                        dX(i, j) = dY(i, 0);
-                    }
-                }
+
+                int flatDy = dyIdx.empty() ? 0 : dY.calculateIndex(dyIdx);
+                dX.data()[i] = dY.data()[flatDy];
             }
         }
 
@@ -255,13 +302,8 @@ namespace tardigrade
     {
         Tensor dY = gradOutputs[0];
         Tensor X = m_inputs[0];
-
-        Tensor dX(X.shape());
-        for (size_t i = 0; i < X.size(); ++i)
-        {
-            dX[i] = (X[i] > 0.0) ? dY[i] : 0.0;
-        }
-
+        Tensor mask = (X > 0.0);
+        Tensor dX = mul(dY, mask);
         return { dX };
     }
 
@@ -276,17 +318,76 @@ namespace tardigrade
         Tensor dY = gradOutputs[0];
         Tensor X = m_inputs[0];
         Tensor dX = Tensor::zeros(X.shape());
+        dX.setSlice(0, m_startRow, m_endRow, dY);
+        return { dX };
+    }
 
-        int rows = m_endRow - m_startRow;
-        int cols = X.dim(1);
-        for (int r = 0; r < rows; ++r)
+    std::vector<Tensor> Conv2dNode::Backward(const std::vector<Tensor>& gradOutputs)
+    {
+        Tensor dY = gradOutputs[0];
+        Tensor X = m_inputs[0];
+        Tensor W = m_inputs[1];
+
+        int N = X.dim(0);
+        int C_in = X.dim(1);
+        int H = X.dim(2);
+        int W_in = X.dim(3);
+
+        int C_out = W.dim(0);
+        int Kh = W.dim(2);
+        int Kw = W.dim(3);
+
+        int outH = dY.dim(2);
+        int outW = dY.dim(3);
+
+        Tensor dY_perm = dY.permute({1, 0, 2, 3}).reshape({C_out, N * outH * outW});
+        Tensor col_X = im2col(X, Kh, Kw, m_stride, m_stride, m_padding, m_padding);
+
+        Tensor dW_flat = matmul(dY_perm, col_X.transpose());
+        Tensor dW = dW_flat.reshape(W.shape());
+
+        Tensor W_flat = W.reshape({C_out, C_in * Kh * Kw});
+        Tensor dcol = matmul(W_flat.transpose(), dY_perm);
+        Tensor dX = col2im(dcol, X.shape(), Kh, Kw, m_stride, m_stride, m_padding, m_padding);
+
+        std::vector<Tensor> grads = { dX, dW };
+
+        if (m_inputs.size() > 2)
         {
-            for (int c = 0; c < cols; ++c)
+            Tensor bias = m_inputs[2];
+            Tensor db_sum = sum(dY, {0, 2, 3}, false);
+            Tensor db = unbroadcast(db_sum, bias.shape());
+            grads.push_back(db);
+        }
+
+        return grads;
+    }
+
+    std::vector<Tensor> MaxPool2dNode::Backward(const std::vector<Tensor>& gradOutputs)
+    {
+        Tensor dY = gradOutputs[0];
+        Tensor X = m_inputs[0];
+
+        Tensor dX(X.shape());
+        dX.fill(0.0);
+
+        const double* idxData = m_argMaxIndices.data();
+        const double* dyData = dY.data();
+        double* dxData = dX.data();
+
+        size_t totalOutputs = dY.size();
+        size_t totalInputs = X.size();
+
+        for (size_t i = 0; i < totalOutputs; ++i)
+        {
+            int maxIdx = static_cast<int>(idxData[i]);
+            if (maxIdx >= 0 && maxIdx < static_cast<int>(totalInputs))
             {
-                dX(m_startRow + r, c) = dY(r, c);
+                dxData[maxIdx] += dyData[i];
             }
         }
 
         return { dX };
     }
 }
+

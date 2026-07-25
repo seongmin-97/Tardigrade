@@ -38,6 +38,8 @@ double Accuracy::Evaluate(const Tensor& prediction, const Tensor& target)
         {
             correctCount++;
         }
+
+
     }
 
     if (B == 0)

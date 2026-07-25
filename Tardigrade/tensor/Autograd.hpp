@@ -251,4 +251,38 @@ namespace tardigrade
     public:
         std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override;
     };
+
+    /**
+     * @brief Node for 2D Convolution operation.
+     */
+    class Conv2dNode : public Node
+    {
+    public:
+        int m_stride;
+        int m_padding;
+
+    public:
+        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override;
+    };
+
+    /**
+     * @brief Node for 2D Max Pooling operation.
+     */
+    class MaxPool2dNode : public Node
+    {
+    public:
+        int m_kernelSize;
+        int m_stride;
+        int m_padding;
+        Tensor m_argMaxIndices;
+
+    public:
+        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override;
+    };
+
+    /**
+     * @brief Helper function to sum-reduce gradients along broadcasted axes to match targetShape.
+     */
+    Tensor unbroadcast(const Tensor& grad, const Shape& targetShape);
 }
+

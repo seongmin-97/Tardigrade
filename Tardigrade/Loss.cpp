@@ -82,14 +82,14 @@ double SoftmaxCrossEntropy::Forward(const Tensor& logits, const Tensor& target)
     }
 
     m_lossTensor = Tensor({1}, logits.requiresGrad() || target.requiresGrad());
-    m_lossTensor[0] = sumLoss / static_cast<double>(cols);
+    m_lossTensor.fill(sumLoss / static_cast<double>(cols));
 
     if (logits.requiresGrad())
     {
         m_lossTensor.setGradNode(exps.gradNode());
     }
 
-    return m_lossTensor[0];
+    return m_lossTensor.item();
 }
 
 Tensor SoftmaxCrossEntropy::Backward()
@@ -181,9 +181,9 @@ double MSE::Forward(const Tensor& prediction, const Tensor& target)
     Tensor diff = sub(prediction, target);
     Tensor sq = mul(diff, diff);
     Tensor totalSum = sum(sq, -1);
-    m_lossTensor = div(totalSum, static_cast<double>(prediction.size()));
+    m_lossTensor = totalSum / static_cast<double>(prediction.size());
 
-    return m_lossTensor[0];
+    return m_lossTensor.item();
 }
 
 Tensor MSE::Backward()
@@ -191,3 +191,5 @@ Tensor MSE::Backward()
     m_lossTensor.Backward();
     return m_prediction.grad();
 }
+
+

@@ -21,12 +21,60 @@ using namespace tardigrade::model;
 using namespace tardigrade::activation;
 using namespace tardigrade::metric;
 
+void testNDTensorAndConv()
+{
+    std::cout << "[TEST] 1. Testing N-D Sub-Tensor [][] indexing...\n";
+    Tensor t3d({2, 3, 4});
+    t3d(0, 1, 2) = 42.0;
+
+    // PyTorch style [][][] access check via operator double()
+    Tensor sub2d = t3d[0];      // Shape: [3, 4]
+    Tensor sub1d = t3d[0][1];   // Shape: [4]
+    double val = t3d[0][1][2];  // Triple indexing chaining to scalar double!
+
+    std::cout << " -> t3d[0][1][2] = " << val << " (Expected: 42)\n";
+
+    std::cout << "[TEST] 2. Testing Broadcasting Add & Scalar Operators...\n";
+    Tensor A({2, 3, 4}, true);
+    A.fill(2.0);
+    Tensor B({3, 1}, true);
+    B.fill(3.0);
+
+    Tensor C = A + B + 5.0; // Broadcasting shape [2, 3, 4]
+    std::cout << " -> C shape: [" << C.dim(0) << ", " << C.dim(1) << ", " << C.dim(2) << "], C(0,0,0)=" << C(0,0,0) << " (Expected: 10)\n";
+
+    Tensor loss = sum(C);
+    loss.Backward();
+    std::cout << " -> A grad shape: [" << A.grad().dim(0) << ", " << A.grad().dim(1) << ", " << A.grad().dim(2) << "], val=" << A.grad().item() << " (Expected: 1)\n";
+    std::cout << " -> B grad shape: [" << B.grad().dim(0) << ", " << B.grad().dim(1) << "], val=" << B.grad().item() << " (Expected: 8)\n";
+
+
+    std::cout << "[TEST] 3. Testing Conv2d & MaxPool2d Forward & Backward...\n";
+    Tensor img({1, 1, 5, 5}, true); // [N, C, H, W]
+    img.fill(1.0);
+    Tensor weight({1, 1, 3, 3}, true); // [C_out, C_in, Kh, Kw]
+    weight.fill(0.5);
+
+    Tensor convOut = conv2d(img, weight, Tensor(), 1, 0); // Output: [1, 1, 3, 3]
+    std::cout << " -> Conv2d output shape: [" << convOut.dim(0) << ", " << convOut.dim(1) << ", " << convOut.dim(2) << ", " << convOut.dim(3) << "], val=" << convOut(0,0,0,0) << " (Expected: 4.5)\n";
+
+    Tensor poolOut = maxPool2d(convOut, 2, 1, 0); // Output: [1, 1, 2, 2]
+    std::cout << " -> MaxPool2d output shape: [" << poolOut.dim(0) << ", " << poolOut.dim(1) << ", " << poolOut.dim(2) << ", " << poolOut.dim(3) << "]\n";
+
+    Tensor convLoss = sum(poolOut);
+    convLoss.Backward();
+    std::cout << " -> Conv2d img grad shape: [" << img.grad().dim(0) << ", " << img.grad().dim(1) << ", " << img.grad().dim(2) << ", " << img.grad().dim(3) << "]\n";
+    std::cout << "[TEST] All N-D Tensor & Conv Tests Passed Successfully!\n\n";
+}
+
 int main()
 {
+    testNDTensorAndConv();
 
     // Hyperparameters
     const std::string datasetRoot = "/Users/home/Main/01_Dev/99_Dataset/MNIST/train";
     constexpr double learningRate = 0.002;
+
     constexpr int numEpochs = 100;
     constexpr int batchSize = 16;
 

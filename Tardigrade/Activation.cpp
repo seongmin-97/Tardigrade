@@ -53,13 +53,18 @@ Tensor ReLU::Forward(const Tensor& input)
 Tensor ReLU::Backward(const Tensor& input)
 {
     m_gradient = Tensor(input.shape());
+    const double* inVal = m_inputVector.data();
+    const double* gradIn = input.data();
+    double* gradOut = m_gradient.data();
+
     for (size_t i = 0; i < m_inputVector.size(); ++i)
     {
-        m_gradient[i] = (m_inputVector[i] > 0.0) ? input[i] : 0.0;
+        gradOut[i] = (inVal[i] > 0.0) ? gradIn[i] : 0.0;
     }
 
     return m_gradient;
 }
+
 
 // ------------------------------------------------------------
 // Softmax Activation
