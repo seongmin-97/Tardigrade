@@ -1,22 +1,22 @@
 # Tardigrade Framework
 
-![Tardigrade](https://img.shields.io/badge/Status-Educational-blue) ![C++17](https://img.shields.io/badge/C++-17-blue) ![macOS](https://img.shields.io/badge/OS-macOS-lightgrey)
+![Tardigrade](https://img.shields.io/badge/Status-Educational-blue) ![C++17](https://img.shields.io/badge/C++-17-blue) ![macOS](https://img.shields.io/badge/OS-macOS-lightgrey) ![Dependencies](https://img.shields.io/badge/Dependencies-Zero-brightgreen)
 
-Tardigrade is a lightweight, educational Deep Learning and 3D Vision framework written from scratch in modern C++17. The project aims to provide clear, understandable implementations of core Neural Network architectures without abstracting away the fundamental mathematics.
+Tardigrade is a 100% Standalone, lightweight educational Deep Learning and 3D Vision framework written from scratch in modern C++17. The project aims to provide clear, understandable implementations of core Neural Network architectures without abstracting away the fundamental mathematics or relying on heavy third-party libraries.
 
 ## Features
 
-- **Zero-Dependency Core Math**: Built entirely on top of `Eigen 3` for robust and high-performance linear algebra and `OpenCV` for dataset loading and image processing.
+- **100% Standalone & Zero Heavy Dependencies**: Core Tensor engine and math operations are implemented entirely from scratch in pure C++17. Image loading is handled by lightweight, single-header `stb_image`.
 - **Clear Mathematical Foundations**: Equations for Forward Propagation, Backpropagation, and Optimizers are heavily documented directly in the codebase using LaTeX/ASCII syntax.
 - **Modular Architecture**: 
-  - `Tensor`: Zero-copy memory mapped arrays (`Eigen::Map`) with Row-Major matrix bindings.
+  - `Tensor`: High-performance N-Dimensional Array with Strided indexing, Broadcasting, and Autograd computation graph.
   - `Model`: Sequential network orchestrator supporting dynamic batch sizing.
-  - `Layer`: Abstract layer designs (e.g., `Dense` with He Initialization) with automatic remainder batch adjustment.
-  - `Activation`: Nonlinearities (`ReLU`, `Softmax`) running column-wise over mini-batches.
+  - `Layer`: Abstract layer designs (e.g., `Dense` with He Initialization, `Conv2D`, `MaxPool2D`) with automatic remainder batch adjustment.
+  - `Activation`: Nonlinearities (`ReLU`, `Softmax`) running over mini-batches.
   - `Loss`: Objective functions (`MSE`, `SoftmaxCrossEntropy`) with mean batch loss scaling.
-  - `Optimizer`: Parameter update algorithms (`SGD`, `Adam`) with optimized zero-gradients initialization via Eigen.
+  - `Optimizer`: Parameter update algorithms (`SGD`, `Adam`).
   - `Metric`: Evaluation indicators (e.g., `Accuracy`) to compute performance metrics on the fly.
-  - `DataLoader`: High-performance batched dataset loading.
+  - `DataLoader`: High-performance batched dataset loading via `stb_image`.
 - **Doxygen Commented**: All headers are fully documented in English Doxygen format.
 - **API Reference**: Extensive markdown documentation available in the `API_References/` directory.
 
@@ -27,9 +27,7 @@ Tardigrade is a lightweight, educational Deep Learning and 3D Vision framework w
 - **OS**: macOS (Linux compatible)
 - **Compiler**: Clang or GCC supporting C++17
 - **Build System**: CMake (>= 3.10)
-- **Dependencies**: 
-  - `Eigen3` (Usually installed via `brew install eigen`)
-  - `OpenCV` (Usually installed via `brew install opencv`)
+- **Dependencies**: None! (Pure C++17 Standard Library)
 
 ---
 

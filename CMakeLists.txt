@@ -4,12 +4,6 @@ project(Tardigrade CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-# Find Eigen3
-find_package(Eigen3 REQUIRED)
-
-# Find OpenCV
-find_package(OpenCV REQUIRED)
-
 # Source files
 set(SOURCES
     Tardigrade/main.cpp
@@ -35,20 +29,15 @@ set(HEADERS
     Tardigrade/Model.hpp
     Tardigrade/Optimizer.hpp
     Tardigrade/Metric.hpp
+    Tardigrade/third_party/stb/stb_image.h
+    Tardigrade/third_party/stb/stb_image_resize2.h
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 # Include directories
 target_include_directories(${PROJECT_NAME} PRIVATE
-    ${EIGEN3_INCLUDE_DIRS}
-    ${OpenCV_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/Tardigrade
     ${CMAKE_CURRENT_SOURCE_DIR}/Tardigrade/tensor
-)
-
-# Link libraries
-target_link_libraries(${PROJECT_NAME} PRIVATE
-    Eigen3::Eigen
-    ${OpenCV_LIBS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/Tardigrade/third_party
 )

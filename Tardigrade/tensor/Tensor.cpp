@@ -34,37 +34,7 @@ Tensor Tensor::fill(const Shape &shape, double value, bool requiresGrad)
 
 void Tensor::fill(double value) { std::fill(data(), data() + size(), value); }
 
-MatrixMap Tensor::asMatrix()
-{
-    if (rank() != 2)
-    {
-        throw std::runtime_error("asMatrix() without arguments is only supported for 2D tensors.");
-    }
-    return MatrixMap(m_impl->m_storage.GetData(), dim(0), dim(1));
-}
 
-ConstMatrixMap Tensor::asMatrix() const
-{
-    if (rank() != 2)
-    {
-        throw std::runtime_error("asMatrix() without arguments is only supported for 2D tensors.");
-    }
-    return ConstMatrixMap(m_impl->m_storage.GetData(), dim(0), dim(1));
-}
-
-MatrixMap Tensor::asMatrix(int rows, int cols) { return MatrixMap(m_impl->m_storage.GetData(), rows, cols); }
-
-ConstMatrixMap Tensor::asMatrix(int rows, int cols) const
-{
-    return ConstMatrixMap(m_impl->m_storage.GetData(), rows, cols);
-}
-
-VectorMap Tensor::asVector() { return VectorMap(m_impl->m_storage.GetData(), m_impl->m_storage.GetSize()); }
-
-ConstVectorMap Tensor::asVector() const
-{
-    return ConstVectorMap(m_impl->m_storage.GetData(), m_impl->m_storage.GetSize());
-}
 
 int Tensor::rank() const { return m_impl->m_shape.size(); }
 
@@ -421,7 +391,13 @@ Tensor &Tensor::operator+=(const Tensor &rhs)
     {
         throw std::runtime_error("Tensor size mismatch in operator+=.");
     }
-    asVector() += rhs.asVector();
+    double *lhsData = data();
+    const double *rhsData = rhs.data();
+    size_t n = size();
+    for (size_t i = 0; i < n; ++i)
+    {
+        lhsData[i] += rhsData[i];
+    }
     return *this;
 }
 
@@ -431,7 +407,13 @@ Tensor &Tensor::operator-=(const Tensor &rhs)
     {
         throw std::runtime_error("Tensor size mismatch in operator-=.");
     }
-    asVector() -= rhs.asVector();
+    double *lhsData = data();
+    const double *rhsData = rhs.data();
+    size_t n = size();
+    for (size_t i = 0; i < n; ++i)
+    {
+        lhsData[i] -= rhsData[i];
+    }
     return *this;
 }
 
@@ -501,7 +483,24 @@ Tensor matmul(const Tensor &A, const Tensor &B)
     }
 
     Tensor C({a_rows, b_cols}, A.requiresGrad() || B.requiresGrad());
-    C.asMatrix(a_rows, b_cols) = A.asMatrix(a_rows, a_cols) * B.asMatrix(b_rows, b_cols);
+    C.fill(0.0);
+
+    double *cData = C.data();
+    const double *aData = A.data();
+    const double *bData = B.data();
+
+    // Cache-friendly Row-Major Matrix Multiplication (i-k-j order)
+    for (int i = 0; i < a_rows; ++i)
+    {
+        for (int k = 0; k < a_cols; ++k)
+        {
+            double aVal = aData[i * a_cols + k];
+            for (int j = 0; j < b_cols; ++j)
+            {
+                cData[i * b_cols + j] += aVal * bData[k * b_cols + j];
+            }
+        }
+    }
 
     if (C.requiresGrad())
     {
@@ -701,7 +700,13 @@ Tensor div(const Tensor &A, double scalar) { return A * (1.0 / scalar); }
 Tensor exp(const Tensor &X)
 {
     Tensor Y(X.shape(), X.requiresGrad());
-    Y.asVector() = X.asVector().array().exp();
+    const double *xData = X.data();
+    double *yData = Y.data();
+    size_t n = X.size();
+    for (size_t i = 0; i < n; ++i)
+    {
+        yData[i] = std::exp(xData[i]);
+    }
 
     if (Y.requiresGrad())
     {
@@ -723,7 +728,13 @@ Tensor exp(const Tensor &X)
 Tensor log(const Tensor &X)
 {
     Tensor Y(X.shape(), X.requiresGrad());
-    Y.asVector() = X.asVector().array().log();
+    const double *xData = X.data();
+    double *yData = Y.data();
+    size_t n = X.size();
+    for (size_t i = 0; i < n; ++i)
+    {
+        yData[i] = std::log(xData[i]);
+    }
 
     if (Y.requiresGrad())
     {
@@ -747,7 +758,14 @@ Tensor sum(const Tensor &X, int axis, bool keepDims)
     if (axis == -1)
     {
         Tensor Y({1}, X.requiresGrad());
-        Y.data()[0] = X.asVector().sum();
+        const double *xData = X.data();
+        size_t n = X.size();
+        double sumVal = 0.0;
+        for (size_t i = 0; i < n; ++i)
+        {
+            sumVal += xData[i];
+        }
+        Y.data()[0] = sumVal;
 
         if (keepDims)
         {

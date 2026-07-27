@@ -1,5 +1,11 @@
 #include "DataLoader.hpp"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "third_party/stb/stb_image.h"
+
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "third_party/stb/stb_image_resize2.h"
+
 using namespace tardigrade;
 using namespace tardigrade::data;
 
@@ -9,60 +15,59 @@ using namespace tardigrade::data;
 DataLoader::DataLoader(LoadStrategy strategy)
     : m_strategy(strategy),
       m_targetSize({0, 0}),
-      m_readFlag(cv::IMREAD_GRAYSCALE)
+      m_readMode(ImageReadMode::GRAYSCALE)
 {
 }
 
 // ------------------------------------------------------------
 // ReadImage: Reads image file and returns a normalized Tensor [0.0, 1.0]
 // ------------------------------------------------------------
-Tensor DataLoader::ReadImage(const std::string& path, MatSize target, int flag) const
+Tensor DataLoader::ReadImage(const std::string& path, MatSize target, ImageReadMode mode) const
 {
-    cv::Mat img = cv::imread(path, flag);
+    int reqChannels = static_cast<int>(mode);
+    int width = 0;
+    int height = 0;
+    int actualChannels = 0;
 
-    if (img.empty())
+    unsigned char* imgData = stbi_load(path.c_str(), &width, &height, &actualChannels, reqChannels);
+    if (!imgData)
     {
-        throw std::runtime_error("Cannot read image: " + path);
+        throw std::runtime_error("Cannot read image: " + path + " (stb_image failure)");
     }
 
-    // 리사이즈 (target이 유효한 경우)
-    if (target.row > 0 && target.col > 0)
+    int outWidth = (target.col > 0) ? target.col : width;
+    int outHeight = (target.row > 0) ? target.row : height;
+
+    std::vector<unsigned char> resizedBuffer;
+    unsigned char* finalPixels = imgData;
+
+    if (outWidth != width || outHeight != height)
     {
-        cv::resize(img, img, cv::Size(target.col, target.row));
+        resizedBuffer.resize(outWidth * outHeight * reqChannels);
+        unsigned char* res = stbir_resize_uint8_linear(
+            imgData, width, height, 0,
+            resizedBuffer.data(), outWidth, outHeight, 0,
+            static_cast<stbir_pixel_layout>(reqChannels)
+        );
+
+        if (!res)
+        {
+            stbi_image_free(imgData);
+            throw std::runtime_error("Failed to resize image: " + path);
+        }
+        finalPixels = resizedBuffer.data();
     }
 
-    int rows = img.rows;
-    int cols = img.cols;
-    int channels = img.channels();
-    int totalPixels = rows * cols * channels;
-
+    int totalPixels = outHeight * outWidth * reqChannels;
     Tensor result({ totalPixels, 1 });
     double* rawPtr = result.data();
 
-    if (channels == 1)
+    for (int i = 0; i < totalPixels; ++i)
     {
-        for (int r = 0; r < rows; ++r)
-        {
-            for (int c = 0; c < cols; ++c)
-            {
-                *rawPtr++ = static_cast<double>(img.at<uchar>(r, c)) / 255.0;
-            }
-        }
-    }
-    else if (channels == 3)
-    {
-        for (int r = 0; r < rows; ++r)
-        {
-            for (int c = 0; c < cols; ++c)
-            {
-                cv::Vec3b pixel = img.at<cv::Vec3b>(r, c);
-                *rawPtr++ = static_cast<double>(pixel[0]) / 255.0;
-                *rawPtr++ = static_cast<double>(pixel[1]) / 255.0;
-                *rawPtr++ = static_cast<double>(pixel[2]) / 255.0;
-            }
-        }
+        rawPtr[i] = static_cast<double>(finalPixels[i]) / 255.0;
     }
 
+    stbi_image_free(imgData);
     return result;
 }
 
@@ -72,10 +77,10 @@ Tensor DataLoader::ReadImage(const std::string& path, MatSize target, int flag) 
 // Assumes directory structure: rootDir/{0~9}/*.{jpg,png,...}
 // Folder names are used as integer labels.
 // ------------------------------------------------------------
-void DataLoader::LoadImageDataset(const std::string& rootDir, MatSize target, int flag)
+void DataLoader::LoadImageDataset(const std::string& rootDir, MatSize target, ImageReadMode mode)
 {
     m_targetSize = target;
-    m_readFlag = flag;
+    m_readMode = mode;
 
     m_data.clear();
     m_paths.clear();
@@ -110,7 +115,7 @@ void DataLoader::LoadImageDataset(const std::string& rootDir, MatSize target, in
             {
                 try
                 {
-                    m_data.push_back(ReadImage(filePath, target, flag));
+                    m_data.push_back(ReadImage(filePath, target, mode));
                     m_labels.push_back(label);
                 }
                 catch (const std::exception& e)
@@ -165,7 +170,7 @@ Tensor DataLoader::GetData(size_t index) const
     }
     else
     {
-        return ReadImage(m_paths[index], m_targetSize, m_readFlag);
+        return ReadImage(m_paths[index], m_targetSize, m_readMode);
     }
 }
 
@@ -205,7 +210,6 @@ Tensor DataLoader::GetBatch(size_t startIdx, size_t batchSize) const
     }
 
     return batch;
-
 }
 
 Tensor DataLoader::GetLabelBatch(size_t startIdx, size_t batchSize) const
@@ -226,7 +230,6 @@ Tensor DataLoader::GetLabelBatch(size_t startIdx, size_t batchSize) const
     }
 
     return batchTarget;
-
 }
 
 // ------------------------------------------------------------

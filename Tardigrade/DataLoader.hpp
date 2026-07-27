@@ -7,9 +7,8 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
+#include <unordered_set>
 #include <vector>
-
-#include <opencv2/opencv.hpp>
 
 #include "Tensor.hpp"
 
@@ -21,6 +20,11 @@ namespace tardigrade::data {
  * LAZY: Loads images from disk on-the-fly (memory-efficient, suitable for large datasets).
  */
 enum class LoadStrategy { EAGER, LAZY };
+
+/**
+ * @brief Image color read mode.
+ */
+enum class ImageReadMode { GRAYSCALE = 1, RGB = 3 };
 
 /**
  * @brief Target size for image resizing (0 indicates preserving original size).
@@ -49,10 +53,10 @@ public:
    * @brief Load image dataset from a root directory.
    * @param rootDir Root directory path containing label subdirectories.
    * @param target Target size for resizing images ({0,0} keeps original size).
-   * @param flag OpenCV imread flag.
+   * @param mode Image color read mode (GRAYSCALE or RGB).
    */
   void LoadImageDataset(const std::string &rootDir, MatSize target = {0, 0},
-                        int flag = cv::IMREAD_GRAYSCALE);
+                        ImageReadMode mode = ImageReadMode::GRAYSCALE);
 
   /**
    * @brief Set the default batch size.
@@ -113,10 +117,10 @@ private:
    * @brief Reads an image from disk and converts it to a normalized Tensor [0.0, 1.0].
    * @param path File path of the image.
    * @param target Target size for resizing.
-   * @param flag OpenCV imread flag.
+   * @param mode Image color read mode.
    * @return Normalized Tensor of shape (totalPixels, 1).
    */
-  Tensor ReadImage(const std::string &path, MatSize target, int flag) const;
+  Tensor ReadImage(const std::string &path, MatSize target, ImageReadMode mode) const;
 
   LoadStrategy m_strategy;
   size_t m_batchSize{1};
@@ -124,7 +128,7 @@ private:
   std::vector<std::string> m_paths;
   std::vector<int> m_labels;
   MatSize m_targetSize;
-  int m_readFlag;
+  ImageReadMode m_readMode;
 
   static inline const std::unordered_set<std::string> IMAGE_EXTENSIONS = {
       ".jpg", ".png", ".jpeg", ".bmp", ".JPG", ".PNG"};

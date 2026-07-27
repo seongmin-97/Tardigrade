@@ -124,7 +124,7 @@ int main()
     std::cout << "[INFO] Loading dataset...\n";
     DataLoader loader(LoadStrategy::EAGER);
     loader.SetBatchSize(batchSize);
-    loader.LoadImageDataset(datasetRoot, {28, 28}, cv::IMREAD_GRAYSCALE);
+    loader.LoadImageDataset(datasetRoot, {28, 28}, ImageReadMode::GRAYSCALE);
 
     if (loader.GetDataSize() == 0)
     {

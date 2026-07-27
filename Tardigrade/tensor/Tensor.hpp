@@ -3,17 +3,10 @@
 #include <memory>
 #include <numeric>
 #include <stdexcept>
-#include <Eigen/Dense>
 
 namespace tardigrade
 {
     using Shape = std::vector<int>;
-
-    using MatrixXdRowMajor = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
-    using MatrixMap = Eigen::Map<MatrixXdRowMajor>;
-    using VectorMap = Eigen::Map<Eigen::VectorXd>;
-    using ConstMatrixMap = Eigen::Map<const MatrixXdRowMajor>;
-    using ConstVectorMap = Eigen::Map<const Eigen::VectorXd>;
 
     class TensorImpl;
     class Tensor;
@@ -235,25 +228,7 @@ namespace tardigrade
         /** @brief In-place subtraction of another Tensor */
         Tensor& operator-=(const Tensor& rhs);
 
-        // Eigen Expression Assignment Operator
-        /** @brief Assigns data from an Eigen matrix/vector expression directly */
-        template<typename Derived>
-        Tensor& operator=(const Eigen::DenseBase<Derived>& expr)
-        {
-            if (rank() == 2)
-            {
-                asMatrix() = expr;
-            }
-            else if (rank() == 1)
-            {
-                asVector() = expr;
-            }
-            else
-            {
-                throw std::runtime_error("Assignment from Eigen expression is only supported for 1D or 2D tensors.");
-            }
-            return *this;
-        }
+
 
         // Autograd Graph & Backward
         /** @brief Triggers automatic differentiation backpropagation starting from this scalar loss Tensor */
@@ -283,25 +258,7 @@ namespace tardigrade
         /** @brief Sets the computational graph Node that created this Tensor */
         void setGradNode(std::shared_ptr<Node> node);
 
-    // Internal Backend accessors (restricted to core tensor ops)
-    public:
-        /** @brief Returns an Eigen MatrixMap view for 2D Tensors */
-        MatrixMap asMatrix();
 
-        /** @brief Returns a const Eigen MatrixMap view for 2D Tensors */
-        ConstMatrixMap asMatrix() const;
-
-        /** @brief Returns an Eigen MatrixMap view with explicit row and col dimensions */
-        MatrixMap asMatrix(int rows, int cols);
-
-        /** @brief Returns a const Eigen MatrixMap view with explicit row and col dimensions */
-        ConstMatrixMap asMatrix(int rows, int cols) const;
-
-        /** @brief Returns an Eigen VectorMap view for 1D Tensors */
-        VectorMap asVector();
-
-        /** @brief Returns a const Eigen VectorMap view for 1D Tensors */
-        ConstVectorMap asVector() const;
 
     public:
         /** @brief Calculates 1D linear storage index from N-D multi-index using strides */
