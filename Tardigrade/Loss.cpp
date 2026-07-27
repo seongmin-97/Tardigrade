@@ -114,6 +114,7 @@ Tensor SoftmaxCrossEntropy::Backward()
         }
 
         m_prediction.setGrad(dLogits);
+        m_prediction.Backward();
     }
 
     return m_prediction.grad();

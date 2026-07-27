@@ -35,14 +35,17 @@ namespace tardigrade
             throw std::runtime_error("Backward called on a tensor that does not require gradients.");
         }
 
-        if (m_impl->m_storage.GetSize() != 1)
+        if (m_impl->m_grad == nullptr)
         {
-            throw std::runtime_error("Backward is only supported for scalar outputs (loss must be a scalar).");
-        }
+            if (m_impl->m_storage.GetSize() != 1)
+            {
+                throw std::runtime_error("Backward is only supported for scalar outputs (loss must be a scalar).");
+            }
 
-        // 1. Initialize self gradient with 1.0
-        m_impl->m_grad = std::make_shared<TensorImpl>(m_impl->m_shape);
-        m_impl->m_grad->m_storage[0] = 1.0;
+            // 1. Initialize self gradient with 1.0
+            m_impl->m_grad = std::make_shared<TensorImpl>(m_impl->m_shape);
+            m_impl->m_grad->m_storage[0] = 1.0;
+        }
 
         // 2. Topological sort starting from m_gradNode
         std::vector<std::shared_ptr<Node>> sortedNodes;
@@ -165,8 +168,8 @@ namespace tardigrade
         Tensor A = m_inputs[0];
         Tensor B = m_inputs[1];
 
-        Tensor dA = dY * B.transpose();
-        Tensor dB = A.transpose() * dY;
+        Tensor dA = matmul(dY, B.transpose());
+        Tensor dB = matmul(A.transpose(), dY);
 
         return { dA, dB };
     }

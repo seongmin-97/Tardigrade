@@ -334,7 +334,7 @@ Tensor Tensor::permute(const std::vector<int> &dims) const
         newShape[i] = m_impl->m_shape[dims[i]];
     }
 
-    Tensor result(newShape);
+    Tensor result(newShape, m_impl->m_requiresGrad);
     const auto &resStrides = result.strides();
     size_t totalElements = result.size();
 
@@ -382,7 +382,26 @@ Tensor Tensor::transpose(int dim0, int dim1) const
     }
     std::swap(dims[norm0], dims[norm1]);
 
-    return permute(dims);
+    Tensor Y = permute(dims);
+    if (requiresGrad())
+    {
+        auto node = std::make_shared<TransposeNode>();
+        node->m_inputs = { *this };
+
+        if (gradNode())
+        {
+            node->m_parents.push_back(gradNode());
+        }
+
+        Y.setGradNode(node);
+        node->m_outputs.push_back(Y.m_impl);
+    }
+    return Y;
+}
+
+Tensor Tensor::matmul(const Tensor &B) const
+{
+    return tardigrade::matmul(*this, B);
 }
 
 Tensor &Tensor::operator+=(const Tensor &rhs)
@@ -1444,6 +1463,8 @@ Tensor operator*(const Tensor &lhs, const Tensor &rhs) { return mul(lhs, rhs); }
 Tensor operator*(const Tensor &lhs, double scalar) { return mul(lhs, Tensor::fill(lhs.shape(), scalar)); }
 
 Tensor operator*(double scalar, const Tensor &rhs) { return mul(Tensor::fill(rhs.shape(), scalar), rhs); }
+
+Tensor operator%(const Tensor &lhs, const Tensor &rhs) { return matmul(lhs, rhs); }
 
 Tensor operator/(const Tensor &lhs, const Tensor &rhs) { return div(lhs, rhs); }
 

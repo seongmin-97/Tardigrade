@@ -57,16 +57,16 @@ Tensor Dense::Forward(const Tensor &input)
      *  - \( \mathbf{1} \): Row vector of ones of shape \( (1, N) \) for bias broadcasting
      *  - \( Y \): Logits output tensor of shape \( (D_{out}, N) \)
      */
-    Tensor Y_feature = matmul(transpose(m_weight), input);
+    Tensor Y_feature = m_weight.transpose() % input;
 
     // Broadcast bias vector by multiplying m_bias^T with a constant row of ones.
     // ones: shape (1, m_batchSize) initialized to 1.0
     Tensor ones = Tensor::ones({1, m_batchSize}, false);
 
-    Tensor Y_bias = matmul(transpose(m_bias), ones);
+    Tensor Y_bias = m_bias.transpose() % ones;
 
     // Add feature and bias predictions: Y = Y_feature + Y_bias
-    Tensor logits = add(Y_feature, Y_bias);
+    Tensor logits = Y_feature + Y_bias;
 
     // Apply polymorphic activation object Forward pass
     return m_activation->Forward(logits);

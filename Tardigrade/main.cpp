@@ -48,6 +48,14 @@ void testNDTensorAndConv()
     std::cout << " -> A grad shape: [" << A.grad().dim(0) << ", " << A.grad().dim(1) << ", " << A.grad().dim(2) << "], val=" << A.grad().data()[0] << " (Expected: 1)\n";
     std::cout << " -> B grad shape: [" << B.grad().dim(0) << ", " << B.grad().dim(1) << "], val=" << B.grad().data()[0] << " (Expected: 8)\n";
 
+    // Testing Matmul Method & Operator %
+    Tensor M1({2, 3}); M1.fill(2.0);
+    Tensor M2({3, 4}); M2.fill(3.0);
+    Tensor ResMethod = M1.matmul(M2);
+    Tensor ResOp = M1 % M2;
+    std::cout << " -> Matmul Method M1.matmul(M2)(0,0)=" << ResMethod(0,0) << " (Expected: 18)\n";
+    std::cout << " -> Matmul Operator (M1 % M2)(0,0)=" << ResOp(0,0) << " (Expected: 18)\n";
+
 
     std::cout << "[TEST] 3. Testing Conv2d & MaxPool2d Forward & Backward...\n";
     Tensor img({1, 1, 5, 5}, true); // [N, C, H, W]
@@ -86,7 +94,8 @@ void testCNNNetwork()
     cnnModel.AddLayer(std::make_unique<Dense>(392, 10, 2, ACTIVATION::NONE));
 
     cnnModel.SetLossFunction(std::make_unique<SoftmaxCrossEntropy>(10, 2));
-    cnnModel.SetOptimizer(std::make_unique<Adam>(0.001));
+    cnnModel.SetOptimizer(std::make_unique<Adam>(0.01));
+    cnnModel.InitWeights();
 
     // Input shape: [N=2, C=1, H=28, W=28]
     Tensor inputImg({2, 1, 28, 28}, true);
@@ -96,9 +105,20 @@ void testCNNNetwork()
     targetLabel(0) = 0.0; // class 0 for batch 0
     targetLabel(1) = 1.0; // class 1 for batch 1
 
-    auto [lossVal, accVal] = cnnModel.TrainStep(inputImg, targetLabel);
+    double initialLoss = 0.0;
+    double finalLoss = 0.0;
 
-    std::cout << " -> CNN TrainStep Loss: " << lossVal << ", Accuracy: " << accVal * 100.0 << "%\n";
+    for (int step = 0; step < 15; ++step)
+    {
+        auto [lossVal, accVal] = cnnModel.TrainStep(inputImg, targetLabel);
+        if (step == 0)
+        {
+            initialLoss = lossVal;
+        }
+        finalLoss = lossVal;
+    }
+
+    std::cout << " -> CNN Train initial Loss: " << initialLoss << " -> final Loss: " << finalLoss << "\n";
     std::cout << "[TEST] CNN Network Test Passed Successfully!\n\n";
 }
 

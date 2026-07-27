@@ -218,6 +218,9 @@ namespace tardigrade
         /** @brief Transposes the last two dimensions of the Tensor */
         Tensor transpose() const;
 
+        /** @brief Performs matrix multiplication with another Tensor: A.matmul(B) */
+        Tensor matmul(const Tensor& B) const;
+
         /** @brief Swaps two specified dimensions (dim0 and dim1) of the Tensor */
         Tensor transpose(int dim0, int dim1) const;
 
@@ -367,6 +370,9 @@ namespace tardigrade
 
     /** @brief Global operator* for double scalar * Tensor */
     Tensor operator*(double scalar, const Tensor& rhs);
+
+    /** @brief Global operator% for Matrix Multiplication A % B (equivalent to PyTorch @ operator) */
+    Tensor operator%(const Tensor& lhs, const Tensor& rhs);
 
     /** @brief Global operator/ for Element-wise Tensor / Tensor (supports Broadcasting) */
     Tensor operator/(const Tensor& lhs, const Tensor& rhs);
