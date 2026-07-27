@@ -34,7 +34,7 @@ double Accuracy::Evaluate(const Tensor& prediction, const Tensor& target)
             }
         }
 
-        if (argMax == static_cast<int>(target[b]))
+        if (argMax == static_cast<int>(target(b)))
         {
             correctCount++;
         }

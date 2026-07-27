@@ -380,6 +380,9 @@ namespace tardigrade
     /** @brief 2D Max Pooling operation: extracts local maximum values over sliding window */
     Tensor maxPool2d(const Tensor& input, int kernelSize, int stride = -1, int padding = 0);
 
+    /** @brief 2D Average Pooling operation: computes local mean values over sliding window */
+    Tensor avgPool2d(const Tensor& input, int kernelSize, int stride = -1, int padding = 0);
+
     // Global Tensor arithmetic operators (Tensor vs Tensor, Tensor vs Scalar)
     /** @brief Global operator+ for Tensor + Tensor (supports Broadcasting) */
     Tensor operator+(const Tensor& lhs, const Tensor& rhs);

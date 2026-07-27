@@ -25,7 +25,7 @@ namespace tardigrade::activation
 		 * @param inputSize Size of the input features.
 		 * @param batchSize Number of samples in a batch.
 		 */
-		Activation(int inputSize, int batchSize);
+		Activation(int inputSize = 0, int batchSize = 0);
 		virtual ~Activation() = default;
 
 		/**
@@ -63,7 +63,7 @@ namespace tardigrade::activation
 	class None : public Activation
 	{
 	public :
-		None(int inputSize, int batchSize) : Activation(inputSize, batchSize) {}
+		None(int inputSize = 0, int batchSize = 0) : Activation(inputSize, batchSize) {}
 
 		Tensor Forward(const Tensor& input) override;
 		Tensor Backward(const Tensor& input) override;
@@ -75,7 +75,7 @@ namespace tardigrade::activation
 	class ReLU : public Activation
 	{
 	public :
-		ReLU(int inputSize, int batchSize) : Activation(inputSize, batchSize) {}
+		ReLU(int inputSize = 0, int batchSize = 0) : Activation(inputSize, batchSize) {}
 
 		Tensor Forward(const Tensor& input) override;
 		Tensor Backward(const Tensor& input) override;

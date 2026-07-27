@@ -16,14 +16,17 @@ void Model::AddLayer(std::unique_ptr<layer::Layer> layer)
     }
 
     int layerBatchSize = layer->GetBatchSize();
-    if (m_batchSize == -1)
+    if (layerBatchSize != -1)
     {
-        m_batchSize = layerBatchSize;
-    }
-    else if (m_batchSize != layerBatchSize)
-    {
-        throw std::invalid_argument("Model::AddLayer - Batch size mismatch. Expected: " + std::to_string(m_batchSize) +
-                                    ", Got: " + std::to_string(layerBatchSize));
+        if (m_batchSize == -1)
+        {
+            m_batchSize = layerBatchSize;
+        }
+        else if (m_batchSize != layerBatchSize)
+        {
+            throw std::invalid_argument("Model::AddLayer - Batch size mismatch. Expected: " + std::to_string(m_batchSize) +
+                                        ", Got: " + std::to_string(layerBatchSize));
+        }
     }
 
     m_layers.push_back(std::move(layer));

@@ -45,8 +45,8 @@ void testNDTensorAndConv()
 
     Tensor loss = sum(C);
     loss.Backward();
-    std::cout << " -> A grad shape: [" << A.grad().dim(0) << ", " << A.grad().dim(1) << ", " << A.grad().dim(2) << "], val=" << A.grad().item() << " (Expected: 1)\n";
-    std::cout << " -> B grad shape: [" << B.grad().dim(0) << ", " << B.grad().dim(1) << "], val=" << B.grad().item() << " (Expected: 8)\n";
+    std::cout << " -> A grad shape: [" << A.grad().dim(0) << ", " << A.grad().dim(1) << ", " << A.grad().dim(2) << "], val=" << A.grad().data()[0] << " (Expected: 1)\n";
+    std::cout << " -> B grad shape: [" << B.grad().dim(0) << ", " << B.grad().dim(1) << "], val=" << B.grad().data()[0] << " (Expected: 8)\n";
 
 
     std::cout << "[TEST] 3. Testing Conv2d & MaxPool2d Forward & Backward...\n";
@@ -67,9 +67,49 @@ void testNDTensorAndConv()
     std::cout << "[TEST] All N-D Tensor & Conv Tests Passed Successfully!\n\n";
 }
 
+void testCNNNetwork()
+{
+    std::cout << "[TEST] 4. Testing CNN Network Construction (Conv2D -> MaxPool2D -> AvgPool2D -> Flatten -> Dense)...\n";
+
+    Model cnnModel;
+    // Layer 0: Conv2D (1 in_channel, 4 out_channels, 3x3 kernel, stride 1, padding 1) + ReLU
+    cnnModel.AddLayer(std::make_unique<Conv2D>(1, 4, 3, 1, 1, ACTIVATION::ReLU));
+    // Layer 1: MaxPool2D (2x2 kernel, stride 2)
+    cnnModel.AddLayer(std::make_unique<MaxPool2D>(2, 2, 0));
+    // Layer 2: Conv2D (4 in_channels, 8 out_channels, 3x3 kernel, stride 1, padding 1) + ReLU
+    cnnModel.AddLayer(std::make_unique<Conv2D>(4, 8, 3, 1, 1, ACTIVATION::ReLU));
+    // Layer 3: AvgPool2D (2x2 kernel, stride 2)
+    cnnModel.AddLayer(std::make_unique<AvgPool2D>(2, 2, 0));
+    // Layer 4: Flatten (8 x 7 x 7 = 392 features)
+    cnnModel.AddLayer(std::make_unique<Flatten>());
+    // Layer 5: Dense (392 -> 10)
+    cnnModel.AddLayer(std::make_unique<Dense>(392, 10, 2, ACTIVATION::NONE));
+
+    cnnModel.SetLossFunction(std::make_unique<SoftmaxCrossEntropy>(10, 2));
+    cnnModel.SetOptimizer(std::make_unique<Adam>(0.001));
+
+    // Input shape: [N=2, C=1, H=28, W=28]
+    Tensor inputImg({2, 1, 28, 28}, true);
+    inputImg.fill(0.5);
+
+    Tensor targetLabel({2});
+    targetLabel(0) = 0.0; // class 0 for batch 0
+    targetLabel(1) = 1.0; // class 1 for batch 1
+
+    auto [lossVal, accVal] = cnnModel.TrainStep(inputImg, targetLabel);
+
+    std::cout << " -> CNN TrainStep Loss: " << lossVal << ", Accuracy: " << accVal * 100.0 << "%\n";
+    std::cout << "[TEST] CNN Network Test Passed Successfully!\n\n";
+}
+
+
+
+
 int main()
 {
     testNDTensorAndConv();
+    testCNNNetwork();
+
 
     // Hyperparameters
     const std::string datasetRoot = "/Users/home/Main/01_Dev/99_Dataset/MNIST/train";

@@ -281,6 +281,26 @@ namespace tardigrade
     };
 
     /**
+     * @brief Node for 2D Average Pooling operation.
+     *
+     * Mathematical Formula:
+     * Forward:
+     *   Y(n, c, oh, ow) = \frac{1}{K_h \times K_w} \sum_{kh=0}^{K_h-1} \sum_{kw=0}^{K_w-1} X(n, c, oh \cdot S + kh, ow \cdot S + kw)
+     * Backward:
+     *   dX(n, c, ih, iw) += \frac{dY(n, c, oh, ow)}{K_h \times K_w}
+     */
+    class AvgPool2dNode : public Node
+    {
+    public:
+        int m_kernelSize;
+        int m_stride;
+        int m_padding;
+
+    public:
+        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override;
+    };
+
+    /**
      * @brief Helper function to sum-reduce gradients along broadcasted axes to match targetShape.
      */
     Tensor unbroadcast(const Tensor& grad, const Shape& targetShape);

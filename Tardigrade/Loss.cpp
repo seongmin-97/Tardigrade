@@ -56,7 +56,7 @@ double SoftmaxCrossEntropy::Forward(const Tensor& logits, const Tensor& target)
     }
 
     Tensor exps = exp(shifted);
-    Tensor sumExps = sum(exps, 0);
+    Tensor sumExps = sum(exps, 0, true);
 
     Tensor S(logits.shape(), logits.requiresGrad());
     for (int j = 0; j < cols; ++j)
@@ -73,7 +73,7 @@ double SoftmaxCrossEntropy::Forward(const Tensor& logits, const Tensor& target)
 
     for (int j = 0; j < cols; ++j)
     {
-        int targetClass = static_cast<int>(target[j]);
+        int targetClass = static_cast<int>(target(j));
         if (targetClass < 0 || targetClass >= rows)
         {
             throw std::runtime_error("Target index out of range in SoftmaxCrossEntropy.");
@@ -105,7 +105,7 @@ Tensor SoftmaxCrossEntropy::Backward()
 
         for (int j = 0; j < cols; ++j)
         {
-            int targetClass = static_cast<int>(m_target[j]);
+            int targetClass = static_cast<int>(m_target(j));
             for (int i = 0; i < rows; ++i)
             {
                 double y = (i == targetClass) ? 1.0 : 0.0;
@@ -148,7 +148,7 @@ Tensor SoftmaxCrossEntropy::GetProbs() const
     }
 
     Tensor exps = exp(shifted);
-    Tensor sumExps = sum(exps, 0);
+    Tensor sumExps = sum(exps, 0, true);
 
     Tensor S(m_prediction.shape());
     for (int j = 0; j < cols; ++j)

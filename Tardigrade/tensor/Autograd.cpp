@@ -389,5 +389,58 @@ namespace tardigrade
 
         return { dX };
     }
+
+    std::vector<Tensor> AvgPool2dNode::Backward(const std::vector<Tensor>& gradOutputs)
+    {
+        Tensor dY = gradOutputs[0];
+        Tensor X = m_inputs[0];
+
+        int N = X.dim(0);
+        int C = X.dim(1);
+        int H = X.dim(2);
+        int W = X.dim(3);
+
+        int outH = dY.dim(2);
+        int outW = dY.dim(3);
+
+        Tensor dX(X.shape());
+        dX.fill(0.0);
+
+        const double* dyData = dY.data();
+        double* dxData = dX.data();
+
+        double poolArea = static_cast<double>(m_kernelSize * m_kernelSize);
+
+        for (int n = 0; n < N; ++n)
+        {
+            for (int c = 0; c < C; ++c)
+            {
+                for (int oh = 0; oh < outH; ++oh)
+                {
+                    for (int ow = 0; ow < outW; ++ow)
+                    {
+                        int flatOut = ((n * C + c) * outH + oh) * outW + ow;
+                        double gradVal = dyData[flatOut] / poolArea;
+
+                        for (int kh = 0; kh < m_kernelSize; ++kh)
+                        {
+                            int ih = oh * m_stride - m_padding + kh;
+                            for (int kw = 0; kw < m_kernelSize; ++kw)
+                            {
+                                int iw = ow * m_stride - m_padding + kw;
+                                if (ih >= 0 && ih < H && iw >= 0 && iw < W)
+                                {
+                                    int flatIn = ((n * C + c) * H + ih) * W + iw;
+                                    dxData[flatIn] += gradVal;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return { dX };
+    }
 }
 

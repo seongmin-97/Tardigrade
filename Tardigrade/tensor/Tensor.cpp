@@ -1250,6 +1250,91 @@ Tensor maxPool2d(
     return Y;
 }
 
+Tensor avgPool2d(
+    const Tensor &input,
+    int kernelSize,
+    int stride,
+    int padding)
+{
+    if (input.rank() != 4)
+    {
+        throw std::runtime_error("avgPool2d requires 4D input [N, C, H, W].");
+    }
+
+    if (stride <= 0)
+    {
+        stride = kernelSize;
+    }
+
+    int N = input.dim(0);
+    int C = input.dim(1);
+    int H = input.dim(2);
+    int W = input.dim(3);
+
+    int outH = (H + 2 * padding - kernelSize) / stride + 1;
+    int outW = (W + 2 * padding - kernelSize) / stride + 1;
+
+    Tensor Y({N, C, outH, outW}, input.requiresGrad());
+
+    const double *inData = input.data();
+    double *yData = Y.data();
+
+    double poolArea = static_cast<double>(kernelSize * kernelSize);
+
+    for (int n = 0; n < N; ++n)
+    {
+        for (int c = 0; c < C; ++c)
+        {
+            for (int oh = 0; oh < outH; ++oh)
+            {
+                for (int ow = 0; ow < outW; ++ow)
+                {
+                    double sumVal = 0.0;
+
+                    for (int kh = 0; kh < kernelSize; ++kh)
+                    {
+                        int ih = oh * stride - padding + kh;
+                        for (int kw = 0; kw < kernelSize; ++kw)
+                        {
+                            int iw = ow * stride - padding + kw;
+                            if (ih >= 0 && ih < H && iw >= 0 && iw < W)
+                            {
+                                int flatIn = ((n * C + c) * H + ih) * W + iw;
+                                sumVal += inData[flatIn];
+                            }
+                        }
+                    }
+
+                    int flatOut = ((n * C + c) * outH + oh) * outW + ow;
+                    yData[flatOut] = sumVal / poolArea;
+                }
+            }
+        }
+    }
+
+    bool reqGrad = input.requiresGrad();
+    Y.m_impl->m_requiresGrad = reqGrad;
+
+    if (reqGrad)
+    {
+        auto node = std::make_shared<AvgPool2dNode>();
+        node->m_kernelSize = kernelSize;
+        node->m_stride = stride;
+        node->m_padding = padding;
+        node->m_inputs = {input};
+
+        if (input.gradNode())
+        {
+            node->m_parents.push_back(input.gradNode());
+        }
+
+        Y.setGradNode(node);
+        node->m_outputs.push_back(Y.m_impl);
+    }
+
+    return Y;
+}
+
 
 Tensor relu(const Tensor &X)
 {
