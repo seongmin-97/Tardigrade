@@ -19,13 +19,12 @@ namespace tardigrade::activation
 	 */
 	class Activation
 	{
-	public :
+	public:
 		/**
 		 * @brief Construct a new Activation object.
 		 * @param inputSize Size of the input features.
-		 * @param batchSize Number of samples in a batch.
 		 */
-		Activation(int inputSize = 0, int batchSize = 0);
+		explicit Activation(int inputSize = 0);
 		virtual ~Activation() = default;
 
 		/**
@@ -42,19 +41,12 @@ namespace tardigrade::activation
 		 */
 		virtual Tensor Backward(const Tensor& input) = 0;
 
-		/**
-		 * @brief Set the batch size for calculations dynamically.
-		 * @param batchSize The new batch size.
-		 */
-		virtual void SetBatchSize(int batchSize);
-
-	protected :
+	protected:
 		Tensor m_inputVector;  ///< Cached input tensor from forward pass
 		Tensor m_outputVector; ///< Cached output tensor from forward pass
 		Tensor m_gradient;     ///< Cached gradient tensor from backward pass
 
 		int m_size;            ///< Input feature size
-		int m_batchSize;       ///< Batch size
 	};
 
 	/**
@@ -62,8 +54,8 @@ namespace tardigrade::activation
 	 */
 	class None : public Activation
 	{
-	public :
-		None(int inputSize = 0, int batchSize = 0) : Activation(inputSize, batchSize) {}
+	public:
+		explicit None(int inputSize = 0) : Activation(inputSize) {}
 
 		Tensor Forward(const Tensor& input) override;
 		Tensor Backward(const Tensor& input) override;
@@ -74,8 +66,8 @@ namespace tardigrade::activation
 	 */
 	class ReLU : public Activation
 	{
-	public :
-		ReLU(int inputSize = 0, int batchSize = 0) : Activation(inputSize, batchSize) {}
+	public:
+		explicit ReLU(int inputSize = 0) : Activation(inputSize) {}
 
 		Tensor Forward(const Tensor& input) override;
 		Tensor Backward(const Tensor& input) override;
@@ -101,8 +93,8 @@ namespace tardigrade::activation
 	 */
 	class Softmax : public Activation
 	{
-	public :
-		Softmax(int inputSize = 0, int batchSize = 0) : Activation(inputSize, batchSize) {}
+	public:
+		explicit Softmax(int inputSize = 0) : Activation(inputSize) {}
 
 		Tensor Forward(const Tensor& input) override;
 		Tensor Backward(const Tensor& gradOutput) override;

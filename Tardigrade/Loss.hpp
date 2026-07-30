@@ -19,9 +19,8 @@ namespace tardigrade::loss
         /**
          * @brief Construct a new Loss object.
          * @param inputSize The size of the input features.
-         * @param batchSize The batch size.
          */
-        Loss(int inputSize, int batchSize);
+        explicit Loss(int inputSize = 0);
         virtual ~Loss() = default;
 
         /**
@@ -48,7 +47,7 @@ namespace tardigrade::loss
 
     protected:
         int m_inputSize;       ///< Input feature size (excluding batch dimension)
-        int m_batchSize;       ///< Batch size
+        int m_batchSize{1};    ///< Dynamic batch size inferred during forward pass
 
         Tensor m_prediction;   ///< Cached predictions from forward pass
         Tensor m_target;       ///< Cached target labels from forward pass
@@ -61,7 +60,7 @@ namespace tardigrade::loss
     class SoftmaxCrossEntropy : public Loss
     {
     public:
-        SoftmaxCrossEntropy(int inputSize, int batchSize);
+        explicit SoftmaxCrossEntropy(int inputSize = 0);
 
         double Forward(const Tensor& logits, const Tensor& target) override;
         Tensor Backward() override;
@@ -78,7 +77,7 @@ namespace tardigrade::loss
     class MSE : public Loss
     {
     public:
-        MSE(int inputSize, int batchSize);
+        explicit MSE(int inputSize = 0);
 
         double Forward(const Tensor& prediction, const Tensor& target) override;
         Tensor Backward() override;

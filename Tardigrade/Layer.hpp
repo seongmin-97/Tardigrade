@@ -38,13 +38,6 @@ namespace tardigrade::layer
          * @brief Initializes weights dynamically.
          */
         virtual void InitWeight() {}
-
-        virtual void SetBatchSize(int batchSize) {}
-
-        virtual int GetBatchSize() const
-        {
-            return -1;
-        }
     };
 
     /**
@@ -57,18 +50,13 @@ namespace tardigrade::layer
          * @brief Construct a new Dense object.
          * @param inputSize Number of input features (excluding bias).
          * @param outputSize Number of output features.
-         * @param batchSize Number of samples processed in one step.
          * @param activation Type of activation function to apply.
          */
-        Dense(int inputSize, int outputSize, int batchSize = 1, activation::ACTIVATION activation = activation::ACTIVATION::NONE);
+        Dense(int inputSize, int outputSize, activation::ACTIVATION activation = activation::ACTIVATION::NONE);
 
         Tensor Forward(const Tensor& input) override;
 
         std::vector<Tensor> GetParameters() override;
-
-        void SetBatchSize(int batchSize) override;
-
-        int GetBatchSize() const override;
 
         /**
          * @brief Initializes weight matrix using He (Kaiming) normal initialization.
@@ -78,7 +66,6 @@ namespace tardigrade::layer
     public:
         int m_inputSize;                  ///< Input feature dimension (excluding bias)
         int m_outputSize;                 ///< Output size (number of neurons)
-        int m_batchSize;                  ///< Batch size
 
         Tensor m_weight;                                      ///< Weight matrix of shape (inputSize, outputSize)
         Tensor m_bias;                                        ///< Bias vector of shape (1, outputSize)

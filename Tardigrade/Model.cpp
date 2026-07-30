@@ -15,20 +15,6 @@ void Model::AddLayer(std::unique_ptr<layer::Layer> layer)
         throw std::invalid_argument("Model::AddLayer - Layer pointer cannot be nullptr.");
     }
 
-    int layerBatchSize = layer->GetBatchSize();
-    if (layerBatchSize != -1)
-    {
-        if (m_batchSize == -1)
-        {
-            m_batchSize = layerBatchSize;
-        }
-        else if (m_batchSize != layerBatchSize)
-        {
-            throw std::invalid_argument("Model::AddLayer - Batch size mismatch. Expected: " + std::to_string(m_batchSize) +
-                                        ", Got: " + std::to_string(layerBatchSize));
-        }
-    }
-
     m_layers.push_back(std::move(layer));
 }
 
@@ -144,14 +130,12 @@ std::pair<double, double> Model::GetCurrentMetrics() const
 
 void Model::PrintProgress(size_t totalDataSize, int epoch, int totalEpochs, size_t stepInterval)
 {
-    if (m_batchSize <= 0)
+    if (totalDataSize == 0)
     {
         return;
     }
 
-    size_t batch = static_cast<size_t>(m_batchSize);
-
-    if (stepInterval > 0 && (m_processedSamples / batch) % stepInterval == 0)
+    if (stepInterval > 0 && (m_processedSamples / stepInterval) > 0 && m_processedSamples < totalDataSize)
     {
         auto [avgLoss, acc] = GetCurrentMetrics();
         std::string metricName = m_metric ? m_metric->GetName() : "Metric";
@@ -179,5 +163,3 @@ optimizer::Optimizer *Model::GetOptimizer() const { return m_optimizer.get(); }
 loss::Loss *Model::GetLossFunction() const { return m_lossFunction.get(); }
 
 metric::Metric *Model::GetMetric() const { return m_metric.get(); }
-
-int Model::GetBatchSize() const { return m_batchSize; }

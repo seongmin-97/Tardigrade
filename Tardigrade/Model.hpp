@@ -68,15 +68,12 @@ public:
     optimizer::Optimizer *GetOptimizer() const;
     loss::Loss *GetLossFunction() const;
     metric::Metric *GetMetric() const;
-    int GetBatchSize() const;
 
 private:
     std::vector<std::unique_ptr<layer::Layer>> m_layers;
     std::unique_ptr<optimizer::Optimizer> m_optimizer;
     std::unique_ptr<loss::Loss> m_lossFunction;
     std::unique_ptr<metric::Metric> m_metric;
-
-    int m_batchSize{-1};
 
     // Accumulated metrics for tracking
     double m_totalLoss{0.0};

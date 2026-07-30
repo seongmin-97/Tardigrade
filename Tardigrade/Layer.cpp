@@ -2,23 +2,22 @@
 
 namespace tardigrade::layer
 {
-Dense::Dense(int inputSize, int outputSize, int batchSize, activation::ACTIVATION activation)
+Dense::Dense(int inputSize, int outputSize, activation::ACTIVATION activation)
 {
     m_inputSize = inputSize;
     m_outputSize = outputSize;
-    m_batchSize = batchSize;
 
     switch (activation)
     {
         case activation::ACTIVATION::ReLU:
-            m_activation = std::make_unique<activation::ReLU>(m_outputSize, m_batchSize);
+            m_activation = std::make_unique<activation::ReLU>(m_outputSize);
             break;
         case activation::ACTIVATION::Softmax:
-            m_activation = std::make_unique<activation::Softmax>(m_outputSize, m_batchSize);
+            m_activation = std::make_unique<activation::Softmax>(m_outputSize);
             break;
         case activation::ACTIVATION::NONE:
         default:
-            m_activation = std::make_unique<activation::None>(m_outputSize, m_batchSize);
+            m_activation = std::make_unique<activation::None>(m_outputSize);
             break;
     }
 
@@ -33,16 +32,11 @@ Dense::Dense(int inputSize, int outputSize, int batchSize, activation::ACTIVATIO
 Tensor Dense::Forward(const Tensor &input)
 {
     int rows = input.dim(0);
-    int cols = (input.rank() == 1) ? 1 : input.dim(1);
+    int batchSize = (input.rank() == 1) ? 1 : input.dim(1);
 
     if (rows != m_inputSize)
     {
         throw std::runtime_error("Input dimension mismatch in autograd Dense::Forward.");
-    }
-
-    if (cols != m_batchSize)
-    {
-        SetBatchSize(cols);
     }
 
     /*
@@ -51,7 +45,7 @@ Tensor Dense::Forward(const Tensor &input)
      * \( Y = W^T X + b^T \cdot \mathbf{1} \)
      *
      * Mathematical breakdown:
-     *  - \( X \): Input tensor of shape \( (D_{in}, N) \) where \( N = \text{m\_batchSize} \)
+     *  - \( X \): Input tensor of shape \( (D_{in}, N) \) where \( N = \text{batchSize} \) dynamically inferred
      *  - \( W \): Feature weight matrix of shape \( (D_{in}, D_{out}) \)
      *  - \( b \): Bias row vector of shape \( (1, D_{out}) \)
      *  - \( \mathbf{1} \): Row vector of ones of shape \( (1, N) \) for bias broadcasting
@@ -60,8 +54,8 @@ Tensor Dense::Forward(const Tensor &input)
     Tensor Y_feature = m_weight.transpose() % input;
 
     // Broadcast bias vector by multiplying m_bias^T with a constant row of ones.
-    // ones: shape (1, m_batchSize) initialized to 1.0
-    Tensor ones = Tensor::ones({1, m_batchSize}, false);
+    // ones: shape (1, batchSize) initialized to 1.0
+    Tensor ones = Tensor::ones({1, batchSize}, false);
 
     Tensor Y_bias = m_bias.transpose() % ones;
 
@@ -74,17 +68,6 @@ Tensor Dense::Forward(const Tensor &input)
 
 
 std::vector<Tensor> Dense::GetParameters() { return {m_weight, m_bias}; }
-
-void Dense::SetBatchSize(int batchSize)
-{
-    if (m_batchSize == batchSize)
-    {
-        return;
-    }
-    m_batchSize = batchSize;
-}
-
-int Dense::GetBatchSize() const { return m_batchSize; }
 
 void Dense::InitWeight()
 {

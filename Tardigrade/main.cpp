@@ -91,9 +91,9 @@ void testCNNNetwork()
     // Layer 4: Flatten (8 x 7 x 7 = 392 features)
     cnnModel.AddLayer(std::make_unique<Flatten>());
     // Layer 5: Dense (392 -> 10)
-    cnnModel.AddLayer(std::make_unique<Dense>(392, 10, 2, ACTIVATION::NONE));
+    cnnModel.AddLayer(std::make_unique<Dense>(392, 10, ACTIVATION::NONE));
 
-    cnnModel.SetLossFunction(std::make_unique<SoftmaxCrossEntropy>(10, 2));
+    cnnModel.SetLossFunction(std::make_unique<SoftmaxCrossEntropy>(10));
     cnnModel.SetOptimizer(std::make_unique<Adam>(0.01));
     cnnModel.InitWeights();
 
@@ -122,13 +122,47 @@ void testCNNNetwork()
     std::cout << "[TEST] CNN Network Test Passed Successfully!\n\n";
 }
 
+void testDynamicBatching()
+{
+    std::cout << "[TEST] 5. Testing Dynamic Batching (N=16 Training -> N=5 Tail Batch -> N=1 Inference)...\n";
 
+    Model model;
+    model.AddLayer(std::make_unique<Dense>(784, 128, ACTIVATION::ReLU));
+    model.AddLayer(std::make_unique<Dense>(128, 10, ACTIVATION::NONE));
+    model.SetLossFunction(std::make_unique<SoftmaxCrossEntropy>(10));
+    model.SetOptimizer(std::make_unique<Adam>(0.01));
+    model.InitWeights();
+
+    // 1. Batch size N = 16
+    Tensor batch16({784, 16}, true);
+    batch16.fill(0.1);
+    Tensor target16({16});
+    target16.fill(0.0);
+    auto [loss16, acc16] = model.TrainStep(batch16, target16);
+    std::cout << " -> Dynamic Batch N=16 TrainStep Loss: " << loss16 << "\n";
+
+    // 2. Tail Batch size N = 5
+    Tensor batch5({784, 5}, true);
+    batch5.fill(0.1);
+    Tensor target5({5});
+    target5.fill(0.0);
+    auto [loss5, acc5] = model.TrainStep(batch5, target5);
+    std::cout << " -> Dynamic Tail Batch N=5 TrainStep Loss: " << loss5 << "\n";
+
+    // 3. Single-Sample Inference N = 1
+    Tensor singleInput({784, 1});
+    singleInput.fill(0.1);
+    Tensor singlePredict = model.Predict(singleInput);
+    std::cout << " -> Single-Sample N=1 Inference Predict shape: [" << singlePredict.dim(0) << ", " << singlePredict.dim(1) << "]\n";
+    std::cout << "[TEST] Dynamic Batching Test Passed Successfully!\n\n";
+}
 
 
 int main()
 {
     testNDTensorAndConv();
     testCNNNetwork();
+    testDynamicBatching();
 
 
     // Hyperparameters
@@ -156,13 +190,13 @@ int main()
     // 2. Model Construction
     // --------------------------------------------------------
     Model model;
-    model.AddLayer(std::make_unique<Dense>(784, 200, batchSize, ACTIVATION::ReLU));
-    model.AddLayer(std::make_unique<Dense>(200, 150, batchSize, ACTIVATION::ReLU));
-    model.AddLayer(std::make_unique<Dense>(150, 150, batchSize, ACTIVATION::ReLU));
-    model.AddLayer(std::make_unique<Dense>(150, 100, batchSize, ACTIVATION::ReLU));
-    model.AddLayer(std::make_unique<Dense>(100, 50, batchSize, ACTIVATION::ReLU));
-    model.AddLayer(std::make_unique<Dense>(50, 10, batchSize, ACTIVATION::NONE));
-    model.SetLossFunction(std::make_unique<SoftmaxCrossEntropy>(10, batchSize));
+    model.AddLayer(std::make_unique<Dense>(784, 200, ACTIVATION::ReLU));
+    model.AddLayer(std::make_unique<Dense>(200, 150, ACTIVATION::ReLU));
+    model.AddLayer(std::make_unique<Dense>(150, 150, ACTIVATION::ReLU));
+    model.AddLayer(std::make_unique<Dense>(150, 100, ACTIVATION::ReLU));
+    model.AddLayer(std::make_unique<Dense>(100, 50, ACTIVATION::ReLU));
+    model.AddLayer(std::make_unique<Dense>(50, 10, ACTIVATION::NONE));
+    model.SetLossFunction(std::make_unique<SoftmaxCrossEntropy>(10));
     model.SetOptimizer(std::make_unique<Adam>(learningRate));
     model.InitWeights();
 

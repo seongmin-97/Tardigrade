@@ -6,11 +6,9 @@ using namespace tardigrade::loss;
 // ------------------------------------------------------------
 // Loss Base Class
 // ------------------------------------------------------------
-Loss::Loss(int inputSize, int batchSize)
+Loss::Loss(int inputSize)
     : m_inputSize(inputSize),
-      m_batchSize(batchSize),
-      m_prediction({ inputSize, batchSize }),
-      m_target({ inputSize, batchSize }),
+      m_batchSize(1),
       m_lossTensor({ 1 })
 {
 }
@@ -18,8 +16,8 @@ Loss::Loss(int inputSize, int batchSize)
 // ------------------------------------------------------------
 // SoftmaxCrossEntropy Implementation
 // ------------------------------------------------------------
-SoftmaxCrossEntropy::SoftmaxCrossEntropy(int inputSize, int batchSize)
-    : Loss(inputSize, batchSize)
+SoftmaxCrossEntropy::SoftmaxCrossEntropy(int inputSize)
+    : Loss(inputSize)
 {
 }
 
@@ -167,8 +165,8 @@ Tensor SoftmaxCrossEntropy::GetProbs() const
 // ------------------------------------------------------------
 // MSE (Mean Squared Error) Implementation
 // ------------------------------------------------------------
-MSE::MSE(int inputSize, int batchSize)
-    : Loss(inputSize, batchSize)
+MSE::MSE(int inputSize)
+    : Loss(inputSize)
 {
 }
 
