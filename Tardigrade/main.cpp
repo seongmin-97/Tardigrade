@@ -63,15 +63,24 @@ void testNDTensorAndConv()
     Tensor weight({1, 1, 3, 3}, true); // [C_out, C_in, Kh, Kw]
     weight.fill(0.5);
 
-    Tensor convOut = conv2d(img, weight, Tensor(), 1, 0); // Output: [1, 1, 3, 3]
-    std::cout << " -> Conv2d output shape: [" << convOut.dim(0) << ", " << convOut.dim(1) << ", " << convOut.dim(2) << ", " << convOut.dim(3) << "], val=" << convOut(0,0,0,0) << " (Expected: 4.5)\n";
+    // convolve: primitive composition (Im2colNode -> ReshapeNode -> MatMulNode -> ReshapeNode -> PermuteNode)
+    Tensor convOut = convolve(img, weight, 1, 0); // Output: [1, 1, 3, 3]
+    std::cout << " -> Convolve output shape: [" << convOut.dim(0) << ", " << convOut.dim(1) << ", " << convOut.dim(2) << ", " << convOut.dim(3) << "], val=" << convOut(0,0,0,0) << " (Expected: 4.5)\n";
 
-    Tensor poolOut = maxPool2d(convOut, 2, 1, 0); // Output: [1, 1, 2, 2]
-    std::cout << " -> MaxPool2d output shape: [" << poolOut.dim(0) << ", " << poolOut.dim(1) << ", " << poolOut.dim(2) << ", " << poolOut.dim(3) << "]\n";
+    // MaxPool2D via primitive composition: im2col -> reshape -> reduce_max -> reshape -> permute
+    {
+        int N=1, C=1, H=3, W=3, k=2, s=1, p=0;
+        int outH=(H-k)/s+1, outW=(W-k)/s+1;
+        Tensor col = im2col(convOut, k, k, s, s, p, p);              // [C*k*k, N*outH*outW]
+        Tensor grouped = col.reshape({C, k*k, N*outH*outW});         // [C, k*k, N*outH*outW]
+        Tensor maxVals = reduce_max(grouped, 1, false);               // [C, N*outH*outW]
+        Tensor poolOut = maxVals.reshape({C, N, outH, outW}).permute({1, 0, 2, 3}); // [N, C, outH, outW]
+        std::cout << " -> MaxPool2d(via reduce_max) output shape: [" << poolOut.dim(0) << ", " << poolOut.dim(1) << ", " << poolOut.dim(2) << ", " << poolOut.dim(3) << "]\n";
 
-    Tensor convLoss = sum(poolOut);
-    convLoss.Backward();
-    std::cout << " -> Conv2d img grad shape: [" << img.grad().dim(0) << ", " << img.grad().dim(1) << ", " << img.grad().dim(2) << ", " << img.grad().dim(3) << "]\n";
+        Tensor convLoss = sum(poolOut);
+        convLoss.Backward();
+        std::cout << " -> Convolve img grad shape: [" << img.grad().dim(0) << ", " << img.grad().dim(1) << ", " << img.grad().dim(2) << ", " << img.grad().dim(3) << "]\n";
+    }
     std::cout << "[TEST] All N-D Tensor & Conv Tests Passed Successfully!\n\n";
 }
 

@@ -2,6 +2,8 @@
 #include "Autograd.hpp"
 #include <algorithm>
 #include <iostream>
+#include <limits>
+
 
 namespace tardigrade
 {
@@ -123,7 +125,7 @@ int Tensor::calculateIndex(const std::vector<int> &indices) const
     return flatIndex;
 }
 
-Tensor Tensor::reshape(const Shape &newShape) const
+Tensor Tensor::reshape(const Shape& newShape) const
 {
     size_t newTotal = 1;
     for (int d : newShape)
@@ -137,10 +139,30 @@ Tensor Tensor::reshape(const Shape &newShape) const
     }
 
     auto newImpl = std::make_shared<TensorImpl>(newShape, m_impl->m_requiresGrad);
-    newImpl->m_storage = m_impl->m_storage;
-    newImpl->m_gradNode = m_impl->m_gradNode;
-    newImpl->m_grad = m_impl->m_grad;
-    return Tensor(newImpl);
+    newImpl->m_storage = m_impl->m_storage; // shared storage (view semantics)
+
+    Tensor result(newImpl);
+
+    if (m_impl->m_requiresGrad)
+    {
+        /*
+         * ReshapeNode tracks gradient flow through shape changes.
+         * Backward: dX = reshape(dY, X.shape)
+         */
+        auto node = std::make_shared<ReshapeNode>();
+        node->m_inputShape = m_impl->m_shape;
+        node->m_inputs = {*this};
+
+        if (m_impl->m_gradNode)
+        {
+            node->m_parents.push_back(m_impl->m_gradNode);
+        }
+
+        result.setGradNode(node);
+        node->m_outputs.push_back(newImpl);
+    }
+
+    return result;
 }
 
 Tensor Tensor::select(int dim, int index) const
@@ -321,21 +343,21 @@ void Tensor::setSlice(int dim, int start, int end, const Tensor &src)
     }
 }
 
-Tensor Tensor::permute(const std::vector<int> &dims) const
+Tensor Tensor::permute(const std::vector<int>& dims) const
 {
-    if (dims.size() != rank())
+    if (dims.size() != static_cast<size_t>(rank()))
     {
         throw std::runtime_error("Permute dimension count mismatch.");
     }
 
     Shape newShape(rank());
-    for (size_t i = 0; i < rank(); ++i)
+    for (size_t i = 0; i < static_cast<size_t>(rank()); ++i)
     {
         newShape[i] = m_impl->m_shape[dims[i]];
     }
 
     Tensor result(newShape, m_impl->m_requiresGrad);
-    const auto &resStrides = result.strides();
+    const auto& resStrides = result.strides();
     size_t totalElements = result.size();
 
     std::vector<int> resIdx(rank());
@@ -350,12 +372,38 @@ Tensor Tensor::permute(const std::vector<int> &dims) const
             temp %= resStrides[d];
         }
 
-        for (size_t d = 0; d < rank(); ++d)
+        for (size_t d = 0; d < static_cast<size_t>(rank()); ++d)
         {
             srcIdx[dims[d]] = resIdx[d];
         }
 
         result.data()[i] = m_impl->m_storage[calculateIndex(srcIdx)];
+    }
+
+    if (m_impl->m_requiresGrad)
+    {
+        /*
+         * PermuteNode tracks gradient flow through axis reordering.
+         * Backward: dX = permute(dY, pi_inv)  where pi_inv[pi[i]] = i
+         */
+        std::vector<int> invDims(rank());
+        for (size_t i = 0; i < static_cast<size_t>(rank()); ++i)
+        {
+            invDims[dims[i]] = static_cast<int>(i);
+        }
+
+        auto node = std::make_shared<PermuteNode>();
+        node->m_axes = std::vector<int>(dims.begin(), dims.end());
+        node->m_inverseAxes = invDims;
+        node->m_inputs = {*this};
+
+        if (gradNode())
+        {
+            node->m_parents.push_back(gradNode());
+        }
+
+        result.setGradNode(node);
+        node->m_outputs.push_back(result.m_impl);
     }
 
     return result;
@@ -382,21 +430,11 @@ Tensor Tensor::transpose(int dim0, int dim1) const
     }
     std::swap(dims[norm0], dims[norm1]);
 
-    Tensor Y = permute(dims);
-    if (requiresGrad())
-    {
-        auto node = std::make_shared<TransposeNode>();
-        node->m_inputs = { *this };
-
-        if (gradNode())
-        {
-            node->m_parents.push_back(gradNode());
-        }
-
-        Y.setGradNode(node);
-        node->m_outputs.push_back(Y.m_impl);
-    }
-    return Y;
+    /*
+     * Transpose is a special case of permute (swap two axes).
+     * PermuteNode handles the autograd tracking.
+     */
+    return permute(dims);
 }
 
 Tensor Tensor::matmul(const Tensor &B) const
@@ -786,12 +824,10 @@ Tensor sum(const Tensor &X, int axis, bool keepDims)
         }
         Y.data()[0] = sumVal;
 
-        if (keepDims)
-        {
-            Shape kdShape(X.rank(), 1);
-            Y = Y.reshape(kdShape);
-        }
-
+        /*
+         * Create SumNode BEFORE potential keepDims reshape.
+         * Graph: X -> SumNode -> Y{1} -> (ReshapeNode) -> Y_keepdim
+         */
         if (Y.requiresGrad())
         {
             auto node = std::make_shared<SumNode>();
@@ -805,6 +841,12 @@ Tensor sum(const Tensor &X, int axis, bool keepDims)
 
             Y.setGradNode(node);
             node->m_outputs.push_back(Y.m_impl);
+        }
+
+        if (keepDims)
+        {
+            Shape kdShape(X.rank(), 1);
+            Y = Y.reshape(kdShape); // ReshapeNode created on top of SumNode
         }
 
         return Y;
@@ -969,9 +1011,9 @@ Tensor im2col(
     int colRows = C * kernelH * kernelW;
     int colCols = N * outH * outW;
 
-    Tensor col({colRows, colCols});
-    double *colData = col.data();
-    const double *inData = input.data();
+    Tensor col({colRows, colCols}, input.requiresGrad());
+    double* colData = col.data();
+    const double* inData = input.data();
 
     for (int c = 0; c < C; ++c)
     {
@@ -1004,6 +1046,31 @@ Tensor im2col(
                 }
             }
         }
+    }
+
+    if (input.requiresGrad())
+    {
+        /*
+         * Im2colNode backward:
+         *   dX = col2im(d_col, X.shape, Kh, Kw, strideH, strideW, padH, padW)
+         */
+        auto node = std::make_shared<Im2colNode>();
+        node->m_kernelH = kernelH;
+        node->m_kernelW = kernelW;
+        node->m_strideH = strideH;
+        node->m_strideW = strideW;
+        node->m_padH = padH;
+        node->m_padW = padW;
+        node->m_inputShape = input.shape();
+        node->m_inputs = {input};
+
+        if (input.gradNode())
+        {
+            node->m_parents.push_back(input.gradNode());
+        }
+
+        col.setGradNode(node);
+        node->m_outputs.push_back(col.m_impl);
     }
 
     return col;
@@ -1073,339 +1140,76 @@ Tensor col2im(
     return img;
 }
 
-Tensor conv2d(
-    const Tensor &input,
-    const Tensor &weight,
-    const Tensor &bias,
-    int stride,
-    int padding)
+/*
+ * reduce_max: Axis-wise maximum reduction with argmax tracking for backward.
+ *
+ * Forward:
+ *   Y_i = max_{j in axis} X_{..., j, ...}
+ * Backward (scatter-add via ReduceMaxNode):
+ *   dX[argmax[i]] += dY[i]
+ */
+Tensor reduce_max(const Tensor& X, int axis, bool keepDims)
 {
-    if (input.rank() != 4 || weight.rank() != 4)
+    int normAxis = Tensor::normalizeAxis(axis, X.rank());
+
+    Shape outShape;
+    for (int i = 0; i < X.rank(); ++i)
     {
-        throw std::runtime_error("conv2d requires 4D input [N, C, H, W] and 4D weight [C_out, C_in, Kh, Kw].");
-    }
-
-    int N = input.dim(0);
-    int C_in = input.dim(1);
-    int H = input.dim(2);
-    int W = input.dim(3);
-
-    int C_out = weight.dim(0);
-    int weightC_in = weight.dim(1);
-    int Kh = weight.dim(2);
-    int Kw = weight.dim(3);
-
-    if (C_in != weightC_in)
-    {
-        throw std::runtime_error("Input channel count must match weight C_in.");
-    }
-
-    int outH = (H + 2 * padding - Kh) / stride + 1;
-    int outW = (W + 2 * padding - Kw) / stride + 1;
-
-    Tensor col = im2col(input, Kh, Kw, stride, stride, padding, padding);
-
-    Tensor weightFlat = weight.reshape({C_out, C_in * Kh * Kw});
-    Tensor outMat = matmul(weightFlat, col); // [C_out, N * outH * outW]
-
-    Tensor outMatPerm = outMat.reshape({C_out, N, outH, outW}).permute({1, 0, 2, 3});
-    Tensor Y = outMatPerm.reshape({N, C_out, outH, outW});
-
-    if (bias.m_impl != nullptr && bias.size() > 0)
-    {
-        Tensor biasReshaped = bias;
-        if (bias.rank() == 1)
+        if (i == normAxis)
         {
-            biasReshaped = bias.reshape({1, C_out, 1, 1});
+            if (keepDims) outShape.push_back(1);
+            // else: remove this axis
         }
-        Y = add(Y, biasReshaped);
-    }
-
-    bool reqGrad = input.requiresGrad() || weight.requiresGrad() || (bias.m_impl && bias.requiresGrad());
-    Y.m_impl->m_requiresGrad = reqGrad;
-
-    if (reqGrad)
-    {
-        auto node = std::make_shared<Conv2dNode>();
-        node->m_stride = stride;
-        node->m_padding = padding;
-        node->m_inputs = {input, weight};
-        if (bias.m_impl != nullptr)
+        else
         {
-            node->m_inputs.push_back(bias);
+            outShape.push_back(X.dim(i));
         }
-
-        if (input.gradNode())
-        {
-            node->m_parents.push_back(input.gradNode());
-        }
-        if (weight.gradNode())
-        {
-            node->m_parents.push_back(weight.gradNode());
-        }
-        if (bias.m_impl && bias.gradNode())
-        {
-            node->m_parents.push_back(bias.gradNode());
-        }
-
-        Y.setGradNode(node);
-        node->m_outputs.push_back(Y.m_impl);
     }
+    if (outShape.empty()) outShape = {1};
 
-    return Y;
-}
+    Tensor Y(outShape, X.requiresGrad());
+    Tensor argMaxFlat(outShape); // stores flat linear indices into X
 
+    const double* xData = X.data();
+    double* yData = Y.data();
+    double* idxData = argMaxFlat.data();
 
-Tensor conv1d(
-    const Tensor &input,
-    const Tensor &weight,
-    const Tensor &bias,
-    int stride,
-    int padding)
-{
-    if (input.rank() != 3 || weight.rank() != 3)
+    // Compute outer x inner loop counts
+    size_t outerStride = 1;
+    for (int i = 0; i < normAxis; ++i) outerStride *= X.dim(i);
+    int axisSize = X.dim(normAxis);
+    size_t innerStride = 1;
+    for (int i = normAxis + 1; i < X.rank(); ++i) innerStride *= X.dim(i);
+
+    for (size_t outer = 0; outer < outerStride; ++outer)
     {
-        throw std::runtime_error("conv1d requires 3D input [N, C, L] and 3D weight [C_out, C_in, Kl].");
-    }
-
-    int N = input.dim(0);
-    int C_in = input.dim(1);
-    int L = input.dim(2);
-
-    int C_out = weight.dim(0);
-    int Kl = weight.dim(2);
-
-    Tensor input4D = input.reshape({N, C_in, 1, L});
-    Tensor weight4D = weight.reshape({C_out, C_in, 1, Kl});
-
-    Tensor out4D = conv2d(input4D, weight4D, bias, stride, padding);
-    int outL = out4D.dim(3);
-
-    return out4D.reshape({N, C_out, outL});
-}
-
-Tensor conv3d(
-    const Tensor &input,
-    const Tensor &weight,
-    const Tensor &bias,
-    int stride,
-    int padding)
-{
-    throw std::runtime_error("conv3d operation is currently a placeholder for N-D sliding window extension.");
-}
-
-Tensor maxPool2d(
-    const Tensor &input,
-    int kernelSize,
-    int stride,
-    int padding)
-{
-    if (input.rank() != 4)
-    {
-        throw std::runtime_error("maxPool2d requires 4D input [N, C, H, W].");
-    }
-
-    if (stride <= 0)
-    {
-        stride = kernelSize;
-    }
-
-    int N = input.dim(0);
-    int C = input.dim(1);
-    int H = input.dim(2);
-    int W = input.dim(3);
-
-    int outH = (H + 2 * padding - kernelSize) / stride + 1;
-    int outW = (W + 2 * padding - kernelSize) / stride + 1;
-
-    Tensor Y({N, C, outH, outW}, input.requiresGrad());
-    Tensor argMaxIndices({N, C, outH, outW});
-
-    const double *inData = input.data();
-    double *yData = Y.data();
-    double *idxData = argMaxIndices.data();
-
-    for (int n = 0; n < N; ++n)
-    {
-        for (int c = 0; c < C; ++c)
+        for (size_t inner = 0; inner < innerStride; ++inner)
         {
-            for (int oh = 0; oh < outH; ++oh)
+            size_t outFlat = outer * innerStride + inner;
+            double maxVal = -std::numeric_limits<double>::infinity();
+            size_t maxIdx = 0;
+
+            for (int k = 0; k < axisSize; ++k)
             {
-                for (int ow = 0; ow < outW; ++ow)
+                size_t xFlat = (outer * static_cast<size_t>(axisSize) + k) * innerStride + inner;
+                if (xData[xFlat] > maxVal)
                 {
-                    double maxVal = -1e9;
-                    int maxIdx = -1;
-
-                    for (int kh = 0; kh < kernelSize; ++kh)
-                    {
-                        int ih = oh * stride - padding + kh;
-                        for (int kw = 0; kw < kernelSize; ++kw)
-                        {
-                            int iw = ow * stride - padding + kw;
-                            if (ih >= 0 && ih < H && iw >= 0 && iw < W)
-                            {
-                                int flatIn = ((n * C + c) * H + ih) * W + iw;
-                                double val = inData[flatIn];
-                                if (val > maxVal)
-                                {
-                                    maxVal = val;
-                                    maxIdx = flatIn;
-                                }
-                            }
-                        }
-                    }
-
-                    int flatOut = ((n * C + c) * outH + oh) * outW + ow;
-                    yData[flatOut] = maxVal;
-                    idxData[flatOut] = static_cast<double>(maxIdx);
+                    maxVal = xData[xFlat];
+                    maxIdx = xFlat;
                 }
             }
+
+            yData[outFlat] = maxVal;
+            idxData[outFlat] = static_cast<double>(maxIdx);
         }
     }
 
-    bool reqGrad = input.requiresGrad();
-    Y.m_impl->m_requiresGrad = reqGrad;
-
-    if (reqGrad)
-    {
-        auto node = std::make_shared<MaxPool2dNode>();
-        node->m_kernelSize = kernelSize;
-        node->m_stride = stride;
-        node->m_padding = padding;
-        node->m_argMaxIndices = argMaxIndices;
-        node->m_inputs = {input};
-
-        if (input.gradNode())
-        {
-            node->m_parents.push_back(input.gradNode());
-        }
-
-        Y.setGradNode(node);
-        node->m_outputs.push_back(Y.m_impl);
-    }
-
-    return Y;
-}
-
-Tensor avgPool2d(
-    const Tensor &input,
-    int kernelSize,
-    int stride,
-    int padding)
-{
-    if (input.rank() != 4)
-    {
-        throw std::runtime_error("avgPool2d requires 4D input [N, C, H, W].");
-    }
-
-    if (stride <= 0)
-    {
-        stride = kernelSize;
-    }
-
-    int N = input.dim(0);
-    int C = input.dim(1);
-    int H = input.dim(2);
-    int W = input.dim(3);
-
-    int outH = (H + 2 * padding - kernelSize) / stride + 1;
-    int outW = (W + 2 * padding - kernelSize) / stride + 1;
-
-    Tensor Y({N, C, outH, outW}, input.requiresGrad());
-
-    const double *inData = input.data();
-    double *yData = Y.data();
-
-    double poolArea = static_cast<double>(kernelSize * kernelSize);
-
-    for (int n = 0; n < N; ++n)
-    {
-        for (int c = 0; c < C; ++c)
-        {
-            for (int oh = 0; oh < outH; ++oh)
-            {
-                for (int ow = 0; ow < outW; ++ow)
-                {
-                    double sumVal = 0.0;
-
-                    for (int kh = 0; kh < kernelSize; ++kh)
-                    {
-                        int ih = oh * stride - padding + kh;
-                        for (int kw = 0; kw < kernelSize; ++kw)
-                        {
-                            int iw = ow * stride - padding + kw;
-                            if (ih >= 0 && ih < H && iw >= 0 && iw < W)
-                            {
-                                int flatIn = ((n * C + c) * H + ih) * W + iw;
-                                sumVal += inData[flatIn];
-                            }
-                        }
-                    }
-
-                    int flatOut = ((n * C + c) * outH + oh) * outW + ow;
-                    yData[flatOut] = sumVal / poolArea;
-                }
-            }
-        }
-    }
-
-    bool reqGrad = input.requiresGrad();
-    Y.m_impl->m_requiresGrad = reqGrad;
-
-    if (reqGrad)
-    {
-        auto node = std::make_shared<AvgPool2dNode>();
-        node->m_kernelSize = kernelSize;
-        node->m_stride = stride;
-        node->m_padding = padding;
-        node->m_inputs = {input};
-
-        if (input.gradNode())
-        {
-            node->m_parents.push_back(input.gradNode());
-        }
-
-        Y.setGradNode(node);
-        node->m_outputs.push_back(Y.m_impl);
-    }
-
-    return Y;
-}
-
-
-Tensor relu(const Tensor &X)
-{
-    Tensor Y(X.shape(), X.requiresGrad());
-    const double *xData = X.data();
-    double *yData = Y.data();
-    for (size_t i = 0; i < X.size(); ++i)
-    {
-        yData[i] = (xData[i] > 0.0) ? xData[i] : 0.0;
-    }
-
-    if (Y.requiresGrad())
-    {
-        auto node = std::make_shared<ReLUNode>();
-        node->m_inputs = {X};
-
-        if (X.gradNode())
-        {
-            node->m_parents.push_back(X.gradNode());
-        }
-
-        Y.setGradNode(node);
-        node->m_outputs.push_back(Y.m_impl);
-    }
-
-    return Y;
-}
-
-Tensor transpose(const Tensor &X)
-{
-    Tensor Y = X.transpose();
     if (X.requiresGrad())
     {
-        auto node = std::make_shared<TransposeNode>();
+        auto node = std::make_shared<ReduceMaxNode>();
+        node->m_axis = normAxis;
+        node->m_keepDims = keepDims;
+        node->m_argMaxFlatIndices = argMaxFlat;
         node->m_inputs = {X};
 
         if (X.gradNode())
@@ -1418,6 +1222,68 @@ Tensor transpose(const Tensor &X)
     }
 
     return Y;
+}
+
+/*
+ * convolve: Named composition of primitive ops for 2D cross-correlation.
+ * This is NOT a new opaque op — it builds a transparent autograd graph.
+ *
+ * Mathematical Formula:
+ *   Y_{[C_out, N*H_out*W_out]} = W_{flat} \cdot \text{im2col}(X)
+ *   Y_{[N, C_out, H_out, W_out]} = \text{permute}(\text{reshape}(Y_{flat}), \{1,0,2,3\})
+ *
+ * Nodes created: Im2colNode → ReshapeNode(kernel) → MatMulNode → ReshapeNode → PermuteNode
+ */
+Tensor convolve(const Tensor& input, const Tensor& kernel, int stride, int padding)
+{
+    if (input.rank() != 4 || kernel.rank() != 4)
+    {
+        throw std::runtime_error("convolve requires 4D input [N,C_in,H,W] and 4D kernel [C_out,C_in,Kh,Kw].");
+    }
+
+    int N = input.dim(0);
+    int C_in = input.dim(1);
+    int C_out = kernel.dim(0);
+    int Kh = kernel.dim(2);
+    int Kw = kernel.dim(3);
+
+    if (input.dim(1) != kernel.dim(1))
+    {
+        throw std::runtime_error("convolve: input C_in does not match kernel C_in.");
+    }
+
+    int outH = (input.dim(2) + 2 * padding - Kh) / stride + 1;
+    int outW = (input.dim(3) + 2 * padding - Kw) / stride + 1;
+
+    // Step 1: im2col — [C_in*Kh*Kw, N*outH*outW]  (Im2colNode)
+    Tensor col = im2col(input, Kh, Kw, stride, stride, padding, padding);
+
+    // Step 2: flatten kernel — [C_out, C_in*Kh*Kw]  (ReshapeNode)
+    Tensor W_flat = kernel.reshape({C_out, C_in * Kh * Kw});
+
+    // Step 3: matmul — [C_out, N*outH*outW]  (MatMulNode)
+    Tensor Y_flat = matmul(W_flat, col);
+
+    // Step 4: reshape + permute — [N, C_out, outH, outW]  (ReshapeNode + PermuteNode)
+    return Y_flat.reshape({C_out, N, outH, outW}).permute({1, 0, 2, 3});
+}
+
+/*
+ * Free function transpose: delegates to Tensor::transpose().
+ * PermuteNode is created inside the member function.
+ */
+Tensor transpose(const Tensor& X)
+{
+    return X.transpose();
+}
+
+/*
+ * Free function permute: delegates to Tensor::permute(dims).
+ * PermuteNode is created inside the member function.
+ */
+Tensor permute(const Tensor& X, const std::vector<int>& dims)
+{
+    return X.permute(dims);
 }
 
 Tensor slice(const Tensor &X, int startRow, int endRow)

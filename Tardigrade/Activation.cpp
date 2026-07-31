@@ -26,12 +26,31 @@ Tensor None::Backward(const Tensor& input)
 Tensor ReLU::Forward(const Tensor& input)
 {
     m_inputVector = input;
-    m_outputVector = relu(input);
+    /*
+     * ReLU as a composition of primitive ops (no dedicated ReLUNode):
+     *
+     * \( \text{ReLU}(x) = x \cdot \mathbf{1}[x > 0] = \text{mul}(x, (x > 0.0)) \)
+     *
+     * Autograd backward via MulNode:
+     * \( \frac{\partial L}{\partial x} = \frac{\partial L}{\partial y} \cdot \mathbf{1}[x > 0] \)
+     *
+     * Note: (input > 0.0) creates a mask tensor with requiresGrad=false (no grad tracked
+     *       through the comparison), so MulNode receives (tracked_x, constant_mask).
+     */
+    Tensor mask = (input > 0.0); // element-wise mask: 1.0 if x > 0, else 0.0
+    m_outputVector = input * mask;
     return m_outputVector;
 }
 
 Tensor ReLU::Backward(const Tensor& input)
 {
+    /*
+     * Gradient is automatically computed via the autograd graph:
+     * MulNode::Backward handles dX = dY * mask (where mask = (X > 0.0))
+     *
+     * This manual backward path is preserved for legacy compatibility
+     * but is not invoked in the autograd flow (loss.Backward() handles it).
+     */
     if (m_inputVector.grad().size() > 0)
     {
         return m_inputVector.grad();

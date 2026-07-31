@@ -126,7 +126,7 @@ Conv2D::Conv2D(int inChannels, int outChannels, int kernelSize, int stride, int 
 }
 
 
-Tensor Conv2D::Forward(const Tensor &input)
+Tensor Conv2D::Forward(const Tensor& input)
 {
     if (input.rank() != 4)
     {
@@ -139,11 +139,21 @@ Tensor Conv2D::Forward(const Tensor &input)
     }
 
     /*
-     * Forward pass of Conv2D Layer:
+     * Forward pass of Conv2D Layer (composition via primitives):
      *
-     * \( Y = \text{conv2d}(X, W, b, S, P) \)
+     * \( Y = \text{convolve}(X, W) + b \)
+     *
+     * Bias broadcasting: reshape b from [C_out] to [1, C_out, 1, 1],
+     * then add to Y [N, C_out, H_out, W_out] via broadcasting.
+     *
+     * Autograd graph: Im2colNode -> ReshapeNode -> MatMulNode -> ReshapeNode
+     *                 -> PermuteNode -> AddNode -> ReshapeNode(bias) -> AddNode
      */
-    Tensor Y = conv2d(input, m_weight, m_bias, m_stride, m_padding);
+    Tensor Y = convolve(input, m_weight, m_stride, m_padding);
+
+    // Add bias: reshape [C_out] -> [1, C_out, 1, 1] for broadcasting
+    Tensor biasReshaped = m_bias.reshape({1, m_outChannels, 1, 1});
+    Y = Y + biasReshaped;
 
     // Dynamic Polymorphic Activation Forward Pass
     return m_activation->Forward(Y);
@@ -188,7 +198,40 @@ MaxPool2D::MaxPool2D(int kernelSize, int stride, int padding)
     m_padding = padding;
 }
 
-Tensor MaxPool2D::Forward(const Tensor &input) { return maxPool2d(input, m_kernelSize, m_stride, m_padding); }
+Tensor MaxPool2D::Forward(const Tensor& input)
+{
+    if (input.rank() != 4)
+    {
+        throw std::runtime_error("MaxPool2D::Forward expects a 4D input tensor [N, C, H, W].");
+    }
+
+    int N = input.dim(0);
+    int C = input.dim(1);
+    int H = input.dim(2);
+    int W = input.dim(3);
+    int k = m_kernelSize;
+    int s = m_stride;
+    int p = m_padding;
+
+    int outH = (H + 2 * p - k) / s + 1;
+    int outW = (W + 2 * p - k) / s + 1;
+
+    /*
+     * MaxPool2D as composition of primitive ops:
+     *
+     * \( \text{col} = \text{im2col}(X, k, k, s, s, p, p) \quad [C \cdot k^2,\; N \cdot H_{out} \cdot W_{out}] \)
+     * \( \text{grouped} = \text{reshape}(\text{col}, [C, k^2, N \cdot H_{out} \cdot W_{out}]) \)
+     * \( \text{maxVals} = \max_{\text{axis}=1}(\text{grouped}) \quad [C, N \cdot H_{out} \cdot W_{out}] \)
+     * \( Y = \text{permute}(\text{reshape}(\text{maxVals}, [C, N, H_{out}, W_{out}]), \{1,0,2,3\}) \)
+     *
+     * Autograd: Im2colNode -> ReshapeNode -> ReduceMaxNode -> ReshapeNode -> PermuteNode
+     * Backward of ReduceMaxNode: scatter-add gradient to argmax positions.
+     */
+    Tensor col = im2col(input, k, k, s, s, p, p);                 // [C*k*k, N*outH*outW]
+    Tensor grouped = col.reshape({C, k * k, N * outH * outW});    // [C, k*k, N*outH*outW]
+    Tensor maxVals = reduce_max(grouped, 1, false);                // [C, N*outH*outW]  ReduceMaxNode
+    return maxVals.reshape({C, N, outH, outW}).permute({1, 0, 2, 3}); // [N, C, outH, outW]
+}
 
 // ------------------------------------------------------------
 // AvgPool2D Layer Implementation
@@ -201,7 +244,41 @@ AvgPool2D::AvgPool2D(int kernelSize, int stride, int padding)
     m_padding = padding;
 }
 
-Tensor AvgPool2D::Forward(const Tensor &input) { return avgPool2d(input, m_kernelSize, m_stride, m_padding); }
+Tensor AvgPool2D::Forward(const Tensor& input)
+{
+    if (input.rank() != 4)
+    {
+        throw std::runtime_error("AvgPool2D::Forward expects a 4D input tensor [N, C, H, W].");
+    }
+
+    int N = input.dim(0);
+    int C = input.dim(1);
+    int H = input.dim(2);
+    int W = input.dim(3);
+    int k = m_kernelSize;
+    int s = m_stride;
+    int p = m_padding;
+
+    int outH = (H + 2 * p - k) / s + 1;
+    int outW = (W + 2 * p - k) / s + 1;
+
+    /*
+     * AvgPool2D as composition of primitive ops:
+     *
+     * \( \text{col} = \text{im2col}(X, k, k, s, s, p, p) \quad [C \cdot k^2,\; N \cdot H_{out} \cdot W_{out}] \)
+     * \( \text{grouped} = \text{reshape}(\text{col}, [C, k^2, N \cdot H_{out} \cdot W_{out}]) \)
+     * \( \text{colSum} = \sum_{\text{axis}=1}(\text{grouped}) \quad [C, N \cdot H_{out} \cdot W_{out}] \)
+     * \( \text{avg} = \text{colSum} / k^2 \quad [C, N \cdot H_{out} \cdot W_{out}] \)
+     * \( Y = \text{permute}(\text{reshape}(\text{avg}, [C, N, H_{out}, W_{out}]), \{1,0,2,3\}) \)
+     *
+     * Autograd: Im2colNode -> ReshapeNode -> SumNode -> DivNode -> ReshapeNode -> PermuteNode
+     */
+    Tensor col = im2col(input, k, k, s, s, p, p);                  // [C*k*k, N*outH*outW]
+    Tensor grouped = col.reshape({C, k * k, N * outH * outW});     // [C, k*k, N*outH*outW]
+    Tensor colSum = sum(grouped, 1, false);                         // [C, N*outH*outW]   SumNode
+    Tensor avg = colSum / static_cast<double>(k * k);              // [C, N*outH*outW]   DivNode
+    return avg.reshape({C, N, outH, outW}).permute({1, 0, 2, 3});  // [N, C, outH, outW]
+}
 
 // ------------------------------------------------------------
 // Flatten Layer Implementation

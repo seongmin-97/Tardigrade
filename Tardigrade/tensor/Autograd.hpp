@@ -203,31 +203,79 @@ namespace tardigrade
     };
 
     /**
-     * @brief Node for ReLU Activation.
+     * @brief Node for im2col memory-layout transformation.
      *
      * Mathematical Formula:
      * Forward:
-     *   Y = max(0, X)
+     *   col = im2col(X, Kh, Kw, S, P)  [C*Kh*Kw, N*H_out*W_out]
      * Backward:
-     *   dX = dY * (X > 0)
+     *   dX = col2im(d_col, X.shape, Kh, Kw, S, P)
      */
-    class ReLUNode : public Node
+    class Im2colNode : public Node
     {
+    public:
+        int m_kernelH, m_kernelW;
+        int m_strideH, m_strideW;
+        int m_padH, m_padW;
+        Shape m_inputShape;
+
     public:
         std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override;
     };
 
     /**
-     * @brief Node for Tensor Transpose.
+     * @brief Node for Tensor Reshape.
      *
      * Mathematical Formula:
      * Forward:
-     *   Y = X^T
+     *   Y = reshape(X, newShape)
      * Backward:
-     *   dX = dY^T
+     *   dX = reshape(dY, X.shape)
      */
-    class TransposeNode : public Node
+    class ReshapeNode : public Node
     {
+    public:
+        Shape m_inputShape;
+
+    public:
+        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override;
+    };
+
+    /**
+     * @brief Node for general N-D Tensor Permutation (generalizes Transpose).
+     *
+     * Mathematical Formula:
+     * Forward:
+     *   Y = permute(X, pi)  where pi is the permutation vector
+     * Backward:
+     *   dX = permute(dY, pi_inv)  where pi_inv[pi[i]] = i
+     */
+    class PermuteNode : public Node
+    {
+    public:
+        std::vector<int> m_axes;        ///< Forward permutation vector
+        std::vector<int> m_inverseAxes; ///< Inverse permutation (for backward)
+
+    public:
+        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override;
+    };
+
+    /**
+     * @brief Node for Axis-wise Maximum Reduction (reduce_max).
+     *
+     * Mathematical Formula:
+     * Forward:
+     *   Y_i = max_{j} X_{...,j,...}  (over the specified axis)
+     * Backward (scatter-add to argmax positions):
+     *   dX_{flat[argmax[i]]} += dY_i
+     */
+    class ReduceMaxNode : public Node
+    {
+    public:
+        int m_axis;
+        bool m_keepDims;
+        Tensor m_argMaxFlatIndices; ///< Flat indices into X for each output position
+
     public:
         std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override;
     };
@@ -252,53 +300,7 @@ namespace tardigrade
         std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override;
     };
 
-    /**
-     * @brief Node for 2D Convolution operation.
-     */
-    class Conv2dNode : public Node
-    {
-    public:
-        int m_stride;
-        int m_padding;
 
-    public:
-        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override;
-    };
-
-    /**
-     * @brief Node for 2D Max Pooling operation.
-     */
-    class MaxPool2dNode : public Node
-    {
-    public:
-        int m_kernelSize;
-        int m_stride;
-        int m_padding;
-        Tensor m_argMaxIndices;
-
-    public:
-        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override;
-    };
-
-    /**
-     * @brief Node for 2D Average Pooling operation.
-     *
-     * Mathematical Formula:
-     * Forward:
-     *   Y(n, c, oh, ow) = \frac{1}{K_h \times K_w} \sum_{kh=0}^{K_h-1} \sum_{kw=0}^{K_w-1} X(n, c, oh \cdot S + kh, ow \cdot S + kw)
-     * Backward:
-     *   dX(n, c, ih, iw) += \frac{dY(n, c, oh, ow)}{K_h \times K_w}
-     */
-    class AvgPool2dNode : public Node
-    {
-    public:
-        int m_kernelSize;
-        int m_stride;
-        int m_padding;
-
-    public:
-        std::vector<Tensor> Backward(const std::vector<Tensor>& gradOutputs) override;
-    };
 
     /**
      * @brief Helper function to sum-reduce gradients along broadcasted axes to match targetShape.

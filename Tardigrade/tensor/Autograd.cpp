@@ -249,11 +249,23 @@ namespace tardigrade
 
         if (m_axis == -1)
         {
+            /*
+             * Global sum backward: broadcast scalar gradient to all elements.
+             * dX[i] = dY[0]  for all i
+             */
             dX.fill(dY.data()[0]);
         }
         else
         {
+            /*
+             * Axis-sum backward: broadcast dY along reduced axis.
+             * Detect keepDims by comparing ranks:
+             *   dY.rank() == X.rank()  => keepDims=true  (size-1 dim retained)
+             *   dY.rank() == X.rank()-1 => keepDims=false (dim removed)
+             */
             int normAxis = Tensor::normalizeAxis(m_axis, X.rank());
+            bool keepDims = (dY.rank() == X.rank());
+
             size_t totalElements = X.size();
             const Shape& xStrides = X.strides();
             std::vector<int> currIdx(X.rank());
@@ -270,7 +282,15 @@ namespace tardigrade
                 std::vector<int> dyIdx;
                 for (int d = 0; d < X.rank(); ++d)
                 {
-                    if (d != normAxis)
+                    if (d == normAxis)
+                    {
+                        if (keepDims)
+                        {
+                            dyIdx.push_back(0); // keepDims: size-1, index always 0
+                        }
+                        // else: axis dimension was removed, skip it
+                    }
+                    else
                     {
                         dyIdx.push_back(currIdx[d]);
                     }
@@ -301,19 +321,41 @@ namespace tardigrade
         return grads;
     }
 
-    std::vector<Tensor> ReLUNode::Backward(const std::vector<Tensor>& gradOutputs)
+    std::vector<Tensor> Im2colNode::Backward(const std::vector<Tensor>& gradOutputs)
     {
-        Tensor dY = gradOutputs[0];
-        Tensor X = m_inputs[0];
-        Tensor mask = (X > 0.0);
-        Tensor dX = mul(dY, mask);
+        /*
+         * im2col backward: undo patch extraction via col2im accumulation.
+         *
+         * dX = col2im(d_col, X.shape, Kh, Kw, strideH, strideW, padH, padW)
+         */
+        Tensor dcol = gradOutputs[0];
+        Tensor dX = col2im(dcol, m_inputShape, m_kernelH, m_kernelW, m_strideH, m_strideW, m_padH, m_padW);
         return { dX };
     }
 
-    std::vector<Tensor> TransposeNode::Backward(const std::vector<Tensor>& gradOutputs)
+    std::vector<Tensor> ReshapeNode::Backward(const std::vector<Tensor>& gradOutputs)
     {
+        /*
+         * Reshape backward: restore gradient to original input shape.
+         *
+         * dX = reshape(dY, X.shape)
+         */
         Tensor dY = gradOutputs[0];
-        return { dY.transpose() };
+        Tensor dX = dY.reshape(m_inputShape);
+        return { dX };
+    }
+
+    std::vector<Tensor> PermuteNode::Backward(const std::vector<Tensor>& gradOutputs)
+    {
+        /*
+         * Permute backward: apply inverse permutation.
+         *
+         * If forward was Y = permute(X, pi), then:
+         *   dX = permute(dY, pi_inv)  where pi_inv[pi[i]] = i
+         */
+        Tensor dY = gradOutputs[0];
+        Tensor dX = dY.permute(m_inverseAxes);
+        return { dX };
     }
 
     std::vector<Tensor> SliceNode::Backward(const std::vector<Tensor>& gradOutputs)
@@ -325,121 +367,33 @@ namespace tardigrade
         return { dX };
     }
 
-    std::vector<Tensor> Conv2dNode::Backward(const std::vector<Tensor>& gradOutputs)
+    std::vector<Tensor> ReduceMaxNode::Backward(const std::vector<Tensor>& gradOutputs)
     {
-        Tensor dY = gradOutputs[0];
-        Tensor X = m_inputs[0];
-        Tensor W = m_inputs[1];
-
-        int N = X.dim(0);
-        int C_in = X.dim(1);
-        int H = X.dim(2);
-        int W_in = X.dim(3);
-
-        int C_out = W.dim(0);
-        int Kh = W.dim(2);
-        int Kw = W.dim(3);
-
-        int outH = dY.dim(2);
-        int outW = dY.dim(3);
-
-        Tensor dY_perm = dY.permute({1, 0, 2, 3}).reshape({C_out, N * outH * outW});
-        Tensor col_X = im2col(X, Kh, Kw, m_stride, m_stride, m_padding, m_padding);
-
-        Tensor dW_flat = matmul(dY_perm, col_X.transpose());
-        Tensor dW = dW_flat.reshape(W.shape());
-
-        Tensor W_flat = W.reshape({C_out, C_in * Kh * Kw});
-        Tensor dcol = matmul(W_flat.transpose(), dY_perm);
-        Tensor dX = col2im(dcol, X.shape(), Kh, Kw, m_stride, m_stride, m_padding, m_padding);
-
-        std::vector<Tensor> grads = { dX, dW };
-
-        if (m_inputs.size() > 2)
-        {
-            Tensor bias = m_inputs[2];
-            Tensor db_sum = sum(dY, {0, 2, 3}, false);
-            Tensor db = unbroadcast(db_sum, bias.shape());
-            grads.push_back(db);
-        }
-
-        return grads;
-    }
-
-    std::vector<Tensor> MaxPool2dNode::Backward(const std::vector<Tensor>& gradOutputs)
-    {
+        /*
+         * reduce_max backward: scatter-add gradient to argmax positions.
+         *
+         * dX[argmax[i]] += dY[i]  for each output element i
+         * All other positions receive zero gradient (sub-differentiability of max).
+         */
         Tensor dY = gradOutputs[0];
         Tensor X = m_inputs[0];
 
         Tensor dX(X.shape());
         dX.fill(0.0);
 
-        const double* idxData = m_argMaxIndices.data();
+        const double* idxData = m_argMaxFlatIndices.data();
         const double* dyData = dY.data();
         double* dxData = dX.data();
 
-        size_t totalOutputs = dY.size();
-        size_t totalInputs = X.size();
+        size_t outSize = dY.size();
+        size_t inSize = X.size();
 
-        for (size_t i = 0; i < totalOutputs; ++i)
+        for (size_t i = 0; i < outSize; ++i)
         {
             int maxIdx = static_cast<int>(idxData[i]);
-            if (maxIdx >= 0 && maxIdx < static_cast<int>(totalInputs))
+            if (maxIdx >= 0 && maxIdx < static_cast<int>(inSize))
             {
                 dxData[maxIdx] += dyData[i];
-            }
-        }
-
-        return { dX };
-    }
-
-    std::vector<Tensor> AvgPool2dNode::Backward(const std::vector<Tensor>& gradOutputs)
-    {
-        Tensor dY = gradOutputs[0];
-        Tensor X = m_inputs[0];
-
-        int N = X.dim(0);
-        int C = X.dim(1);
-        int H = X.dim(2);
-        int W = X.dim(3);
-
-        int outH = dY.dim(2);
-        int outW = dY.dim(3);
-
-        Tensor dX(X.shape());
-        dX.fill(0.0);
-
-        const double* dyData = dY.data();
-        double* dxData = dX.data();
-
-        double poolArea = static_cast<double>(m_kernelSize * m_kernelSize);
-
-        for (int n = 0; n < N; ++n)
-        {
-            for (int c = 0; c < C; ++c)
-            {
-                for (int oh = 0; oh < outH; ++oh)
-                {
-                    for (int ow = 0; ow < outW; ++ow)
-                    {
-                        int flatOut = ((n * C + c) * outH + oh) * outW + ow;
-                        double gradVal = dyData[flatOut] / poolArea;
-
-                        for (int kh = 0; kh < m_kernelSize; ++kh)
-                        {
-                            int ih = oh * m_stride - m_padding + kh;
-                            for (int kw = 0; kw < m_kernelSize; ++kw)
-                            {
-                                int iw = ow * m_stride - m_padding + kw;
-                                if (ih >= 0 && ih < H && iw >= 0 && iw < W)
-                                {
-                                    int flatIn = ((n * C + c) * H + ih) * W + iw;
-                                    dxData[flatIn] += gradVal;
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
 
