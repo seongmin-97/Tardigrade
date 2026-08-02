@@ -261,6 +261,10 @@ Tensor mul(const Tensor &A, const Tensor &B);
 /** @brief Element-wise or Broadcasted Division: Y = A / B */
 Tensor div(const Tensor &A, const Tensor &B);
 
+/** @brief Element-wise Division with double scalar: Y = A / scalar */
+Tensor div(const Tensor &A, double scalar);
+
+
 /** @brief Element-wise Natural Exponential function: Y = exp(X) */
 Tensor exp(const Tensor &X);
 

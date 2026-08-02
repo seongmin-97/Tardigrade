@@ -41,3 +41,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Tardigrade/tensor
     ${CMAKE_CURRENT_SOURCE_DIR}/Tardigrade/third_party
 )
+
+# Enable Unit Testing Directory
+add_subdirectory(UnitTest)
+

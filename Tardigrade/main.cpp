@@ -1,6 +1,6 @@
 /**
  * @file main.cpp
- * @brief MNIST image classification training with Adam + 3-layer Dense MLP using Autograd
+ * @brief MNIST image classification & generic dataset training with Adam + 3-layer Dense MLP using Autograd
  */
 
 #include <cmath>
@@ -56,7 +56,6 @@ void testNDTensorAndConv()
     std::cout << " -> Matmul Method M1.matmul(M2)(0,0)=" << ResMethod(0,0) << " (Expected: 18)\n";
     std::cout << " -> Matmul Operator (M1 % M2)(0,0)=" << ResOp(0,0) << " (Expected: 18)\n";
 
-
     std::cout << "[TEST] 3. Testing Conv2d & MaxPool2d Forward & Backward...\n";
     Tensor img({1, 1, 5, 5}, true); // [N, C, H, W]
     img.fill(1.0);
@@ -69,10 +68,10 @@ void testNDTensorAndConv()
 
     // MaxPool2D via primitive composition: im2col -> reshape -> reduce_max -> reshape -> permute
     {
-        int N=1, C=1, H=3, W=3, k=2, s=1, p=0;
-        int outH=(H-k)/s+1, outW=(W-k)/s+1;
+        int N = 1, C = 1, H = 3, W = 3, k = 2, s = 1, p = 0;
+        int outH = (H - k) / s + 1, outW = (W - k) / s + 1;
         Tensor col = im2col(convOut, k, k, s, s, p, p);              // [C*k*k, N*outH*outW]
-        Tensor grouped = col.reshape({C, k*k, N*outH*outW});         // [C, k*k, N*outH*outW]
+        Tensor grouped = col.reshape({C, k * k, N * outH * outW});         // [C, k*k, N*outH*outW]
         Tensor maxVals = reduce_max(grouped, 1, false);               // [C, N*outH*outW]
         Tensor poolOut = maxVals.reshape({C, N, outH, outW}).permute({1, 0, 2, 3}); // [N, C, outH, outW]
         std::cout << " -> MaxPool2d(via reduce_max) output shape: [" << poolOut.dim(0) << ", " << poolOut.dim(1) << ", " << poolOut.dim(2) << ", " << poolOut.dim(3) << "]\n";
@@ -166,18 +165,61 @@ void testDynamicBatching()
     std::cout << "[TEST] Dynamic Batching Test Passed Successfully!\n\n";
 }
 
+void testVersatileDataLoader()
+{
+    std::cout << "[TEST] 6. Testing Versatile DataLoader (FromTensor & FromCustom)...\n";
+
+    // Test FromTensor with synthetic tabular data (features: 4, samples: 20)
+    Tensor syntheticX({4, 20});
+    syntheticX.fill(1.5);
+    Tensor syntheticY({1, 20});
+    syntheticY.fill(1.0);
+
+    DataLoader tensorLoader = DataLoader::FromTensor(syntheticX, syntheticY);
+    tensorLoader.SetBatchSize(4);
+
+    std::mt19937 rng(42);
+    tensorLoader.Shuffle(rng);
+
+    Tensor batchX = tensorLoader.GetBatch(0);
+    Tensor batchY = tensorLoader.GetLabelBatch(0);
+
+    std::cout << " -> DataLoader::FromTensor batchX shape: [" << batchX.dim(0) << ", " << batchX.dim(1) << "]"
+              << ", batchY shape: [" << batchY.dim(0) << ", " << batchY.dim(1) << "]\n";
+
+    // Test FromCustom with custom lambda sample fetcher
+    DataLoader customLoader = DataLoader::FromCustom(10, [](size_t idx) -> std::pair<Tensor, Tensor>
+    {
+        Tensor feat({2, 1});
+        feat.data()[0] = static_cast<double>(idx);
+        feat.data()[1] = static_cast<double>(idx * 2);
+
+        Tensor label({1, 1});
+        label.data()[0] = static_cast<double>(idx % 2);
+
+        return {feat, label};
+    });
+
+    customLoader.SetBatchSize(3);
+    Tensor customBatchX = customLoader.GetBatch(0);
+    Tensor customBatchY = customLoader.GetLabelBatch(0);
+
+    std::cout << " -> DataLoader::FromCustom batchX shape: [" << customBatchX.dim(0) << ", " << customBatchX.dim(1) << "]"
+              << ", sample(0) values: [" << customBatchX(0, 0) << ", " << customBatchX(1, 0) << "]\n";
+
+    std::cout << "[TEST] Versatile DataLoader Test Passed Successfully!\n\n";
+}
 
 int main()
 {
     testNDTensorAndConv();
     testCNNNetwork();
     testDynamicBatching();
-
+    testVersatileDataLoader();
 
     // Hyperparameters
     const std::string datasetRoot = "/Users/home/Main/01_Dev/99_Dataset/MNIST/train";
     constexpr double learningRate = 0.002;
-
     constexpr int numEpochs = 100;
     constexpr int batchSize = 16;
 
@@ -185,9 +227,8 @@ int main()
     // 1. Data Loading (Eager — 전체 데이터를 RAM에 적재)
     // --------------------------------------------------------
     std::cout << "[INFO] Loading dataset...\n";
-    DataLoader loader(LoadStrategy::EAGER);
+    DataLoader loader = DataLoader::FromImageFolder(datasetRoot, {28, 28}, ImageReadMode::GRAYSCALE, LoadStrategy::EAGER);
     loader.SetBatchSize(batchSize);
-    loader.LoadImageDataset(datasetRoot, {28, 28}, ImageReadMode::GRAYSCALE);
 
     if (loader.GetDataSize() == 0)
     {

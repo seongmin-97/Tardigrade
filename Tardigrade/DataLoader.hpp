@@ -1,136 +1,212 @@
 #pragma once
 #include <algorithm>
 #include <filesystem>
+#include <functional>
 #include <iostream>
 #include <numeric>
 #include <random>
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
-#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "Tensor.hpp"
 
-namespace tardigrade::data {
+namespace tardigrade::data
+{
 /**
- * @brief Data loading strategy.
+ * @brief Data loading strategy for file-based datasets.
  * 
- * EAGER: Loads the entire dataset into RAM (faster training, suitable for small/medium datasets).
- * LAZY: Loads images from disk on-the-fly (memory-efficient, suitable for large datasets).
+ * EAGER: Preloads all samples into RAM during initialization.
+ * LAZY: Reads samples from disk on-the-fly when requested.
  */
-enum class LoadStrategy { EAGER, LAZY };
+enum class LoadStrategy
+{
+    EAGER,
+    LAZY
+};
 
 /**
  * @brief Image color read mode.
  */
-enum class ImageReadMode { GRAYSCALE = 1, RGB = 3 };
+enum class ImageReadMode
+{
+    GRAYSCALE = 1,
+    RGB = 3
+};
 
 /**
- * @brief Target size for image resizing (0 indicates preserving original size).
+ * @brief Target size for image resizing (0, 0 preserves original dimensions).
  */
-struct MatSize {
-  int row;
-  int col;
+struct MatSize
+{
+    int row;
+    int col;
 };
 
 namespace fs = std::filesystem;
 
 /**
- * @brief DataLoader - Handles image loading, preprocessing, and batch generation.
+ * @brief DataLoader - Universal dataset loader and mini-batch generator.
  * 
- * It scans the directory structure (assumes rootDir/{label}/<files>) and manages data access.
+ * Supports image folder structures, in-memory Tensors, and custom lambda sample fetchers.
+ * Uses index-based shuffling for O(N) performance without moving heavy sample data.
  */
-class DataLoader {
+class DataLoader
+{
 public:
-  /**
-   * @brief Construct a new DataLoader object.
-   * @param strategy The data loading strategy (EAGER or LAZY).
-   */
-  DataLoader(LoadStrategy strategy = LoadStrategy::EAGER);
+    /**
+     * @brief Construct an empty DataLoader object.
+     */
+    DataLoader() = default;
 
-  /**
-   * @brief Load image dataset from a root directory.
-   * @param rootDir Root directory path containing label subdirectories.
-   * @param target Target size for resizing images ({0,0} keeps original size).
-   * @param mode Image color read mode (GRAYSCALE or RGB).
-   */
-  void LoadImageDataset(const std::string &rootDir, MatSize target = {0, 0},
-                        ImageReadMode mode = ImageReadMode::GRAYSCALE);
+    /**
+     * @brief Create a DataLoader from an image directory structure (rootDir/{label}/*.jpg).
+     * @param rootDir Directory path containing label subdirectories.
+     * @param target Target size for resizing images ({0,0} preserves original size).
+     * @param mode Image color read mode (GRAYSCALE or RGB).
+     * @param strategy Loading strategy (EAGER or LAZY).
+     * @return DataLoader instance configured for image loading.
+     */
+    static DataLoader FromImageFolder(const std::string &rootDir,
+                                       MatSize target = {0, 0},
+                                       ImageReadMode mode = ImageReadMode::GRAYSCALE,
+                                       LoadStrategy strategy = LoadStrategy::EAGER);
 
-  /**
-   * @brief Set the default batch size.
-   * @param batchSize Default batch size for batch retrieval.
-   */
-  void SetBatchSize(size_t batchSize);
+    /**
+     * @brief Create a DataLoader from in-memory feature and target Tensors.
+     * @param inputs Feature matrix/tensor where columns or 0-th dimension represents samples.
+     * @param targets Target label matrix/tensor.
+     * @return DataLoader instance wrapping the given Tensors.
+     */
+    static DataLoader FromTensor(const Tensor &inputs, const Tensor &targets);
 
-  /**
-   * @brief Get the default batch size.
-   * @return The configured batch size.
-   */
-  size_t GetBatchSize() const;
+    /**
+     * @brief Create a DataLoader from a custom sample fetching function.
+     * @param totalSamples Total number of samples in the dataset.
+     * @param sampleFetcher Function returning std::pair<Tensor, Tensor> (feature, target) for a given index.
+     * @return DataLoader instance using the custom fetcher.
+     */
+    static DataLoader FromCustom(size_t totalSamples,
+                                 std::function<std::pair<Tensor, Tensor>(size_t index)> sampleFetcher);
 
-  /**
-   * @brief Get the total size of the dataset.
-   * @return The number of samples.
-   */
-  size_t GetDataSize() const;
+    /**
+     * @brief Load image dataset (Backward-compatible helper method).
+     * @param rootDir Directory path containing label subdirectories.
+     * @param target Target size for resizing images.
+     * @param mode Image color read mode.
+     */
+    void LoadImageDataset(const std::string &rootDir,
+                          MatSize target = {0, 0},
+                          ImageReadMode mode = ImageReadMode::GRAYSCALE);
 
-  /**
-   * @brief Get a single data sample by index.
-   * @param index The sample index.
-   * @return Tensor representing the image.
-   */
-  Tensor GetData(size_t index) const;
+    /**
+     * @brief Set default batch size.
+     * @param batchSize Number of samples per mini-batch.
+     */
+    void SetBatchSize(size_t batchSize);
 
-  /**
-   * @brief Get a single label by index.
-   * @param index The sample index.
-   * @return The integer label.
-   */
-  int GetLabel(size_t index) const;
+    /**
+     * @brief Get configured batch size.
+     * @return Current default batch size.
+     */
+    size_t GetBatchSize() const;
 
-  /**
-   * @brief Retrieve a batch of image tensors stacked together.
-   * @param startIdx The starting index of the batch.
-   * @param batchSize The size of the batch (0 uses configured m_batchSize).
-   * @return Combined batch Tensor of shape (featureSize, actualBatchSize).
-   */
-  Tensor GetBatch(size_t startIdx, size_t batchSize = 0) const;
+    /**
+     * @brief Get total number of samples in dataset.
+     * @return Total sample count.
+     */
+    size_t GetDataSize() const;
 
-  /**
-   * @brief Retrieve a batch of labels as a Tensor.
-   * @param startIdx The starting index of the batch.
-   * @param batchSize The size of the batch (0 uses configured m_batchSize).
-   * @return Tensor representing the labels.
-   */
-  Tensor GetLabelBatch(size_t startIdx, size_t batchSize = 0) const;
+    /**
+     * @brief Retrieve a single sample pair (feature, target) by index.
+     * @param index Sample index [0, GetDataSize() - 1].
+     * @return Pair of Tensors representing (feature, target).
+     */
+    std::pair<Tensor, Tensor> GetSample(size_t index) const;
 
-  /**
-   * @brief Shuffle the dataset.
-   * @param rng Random number generator engine for reproducibility.
-   */
-  void Shuffle(std::mt19937 &rng);
+    /**
+     * @brief Get feature Tensor for a single sample by index.
+     * @param index Sample index.
+     * @return Feature Tensor.
+     */
+    Tensor GetData(size_t index) const;
+
+    /**
+     * @brief Get integer label for a single sample by index (assumes scalar target).
+     * @param index Sample index.
+     * @return Integer label.
+     */
+    int GetLabel(size_t index) const;
+
+    /**
+     * @brief Retrieve a mini-batch of feature Tensors stacked along batch dimension.
+     * 
+     * Batch Extraction Mathematics:
+     * Given mini-batch indices \( I_k = \{ \pi(startIdx), \pi(startIdx + 1), \dots, \pi(startIdx + B - 1) \} \),
+     * where \( \pi \in S_N \) is the index permutation array generated by Shuffle(),
+     * the batch input tensor \( X_B \in \mathbb{R}^{d_{in} \times B} \) is constructed by stacking sample feature vectors:
+     * \[
+     * X_B[:, i] = x_{\pi(startIdx + i)} \quad \text{for } i = 0, \dots, B-1
+     * \]
+     * 
+     * @param startIdx Starting index in the shuffled index array.
+     * @param batchSize Batch size (0 uses configured m_batchSize).
+     * @return Mini-batch feature Tensor.
+     */
+    Tensor GetBatch(size_t startIdx, size_t batchSize = 0) const;
+
+    /**
+     * @brief Retrieve a mini-batch of target/label Tensors.
+     * @param startIdx Starting index in the shuffled index array.
+     * @param batchSize Batch size (0 uses configured m_batchSize).
+     * @return Mini-batch target Tensor.
+     */
+    Tensor GetLabelBatch(size_t startIdx, size_t batchSize = 0) const;
+
+    /**
+     * @brief Retrieve both feature and target mini-batch Tensors as a pair.
+     * @param startIdx Starting index in the shuffled index array.
+     * @param batchSize Batch size (0 uses configured m_batchSize).
+     * @return std::pair<Tensor, Tensor> containing (batchInputs, batchTargets).
+     */
+    std::pair<Tensor, Tensor> GetBatchPair(size_t startIdx, size_t batchSize = 0) const;
+
+    /**
+     * @brief Shuffle dataset indices for random batch generation.
+     * @param rng Random number generator engine.
+     */
+    void Shuffle(std::mt19937 &rng);
 
 private:
-  /**
-   * @brief Reads an image from disk and converts it to a normalized Tensor [0.0, 1.0].
-   * @param path File path of the image.
-   * @param target Target size for resizing.
-   * @param mode Image color read mode.
-   * @return Normalized Tensor of shape (totalPixels, 1).
-   */
-  Tensor ReadImage(const std::string &path, MatSize target, ImageReadMode mode) const;
+    /**
+     * @brief Read an image from disk and return a normalized Tensor [0.0, 1.0].
+     * @param path Image file path.
+     * @param target Target size for resizing.
+     * @param mode Image color mode.
+     * @return Normalized Tensor of shape (totalPixels, 1).
+     */
+    static Tensor ReadImage(const std::string &path, MatSize target, ImageReadMode mode);
 
-  LoadStrategy m_strategy;
-  size_t m_batchSize{1};
-  std::vector<Tensor> m_data;
-  std::vector<std::string> m_paths;
-  std::vector<int> m_labels;
-  MatSize m_targetSize;
-  ImageReadMode m_readMode;
+    LoadStrategy m_strategy{LoadStrategy::EAGER};
+    size_t m_batchSize{1};
+    size_t m_dataSize{0};
 
-  static inline const std::unordered_set<std::string> IMAGE_EXTENSIONS = {
-      ".jpg", ".png", ".jpeg", ".bmp", ".JPG", ".PNG"};
+    // Index permutation array for O(N) shuffle without sample copying
+    std::vector<size_t> m_indices;
+
+    // Custom sample fetcher delegate: index -> (feature, target)
+    std::function<std::pair<Tensor, Tensor>(size_t index)> m_sampleFetcher;
+
+    // Internal buffers for image directory loading
+    std::vector<Tensor> m_data;
+    std::vector<std::string> m_paths;
+    std::vector<int> m_labels;
+    MatSize m_targetSize{0, 0};
+    ImageReadMode m_readMode{ImageReadMode::GRAYSCALE};
+
+    static inline const std::unordered_set<std::string> IMAGE_EXTENSIONS = {
+        ".jpg", ".png", ".jpeg", ".bmp", ".JPG", ".PNG"};
 };
 } // namespace tardigrade::data
